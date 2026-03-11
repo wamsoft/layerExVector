@@ -1,28 +1,45 @@
 cmake_minimum_required(VERSION 3.16)
 
-# UTF-8 source
-add_compile_options("$<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C>>:/utf-8>")
-add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/utf-8>")
-add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/Zc:__cplusplus>")
+include(../tp_stub/krkrz.cmake)
 
-# MSVC static runtime
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# ThorVG configuration - static library, SW engine only
+set(TVG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(TVG_THREADS ON CACHE BOOL "" FORCE)
+set(TVG_PARTIAL ON CACHE BOOL "" FORCE)
+set(TVG_SIMD OFF CACHE BOOL "" FORCE)
+set(TVG_LOG OFF CACHE BOOL "" FORCE)
+set(TVG_FILE_IO ON CACHE BOOL "" FORCE)
 
-set(PROJECT_NAME layerExDraw)
-set(PROJECT_VERSION 1.00)
+# Enable SW engine only
+set(TVG_ENGINE_SW ON CACHE BOOL "" FORCE)
+set(TVG_ENGINE_GL OFF CACHE BOOL "" FORCE)
+set(TVG_ENGINE_WG OFF CACHE BOOL "" FORCE)
 
-project(${PROJECT_NAME} VERSION ${PROJECT_VERSION})
+# Loaders - enable what we need
+set(TVG_LOADER_SVG ON CACHE BOOL "" FORCE)
+set(TVG_LOADER_PNG ON CACHE BOOL "" FORCE)
+set(TVG_LOADER_JPG ON CACHE BOOL "" FORCE)
+set(TVG_LOADER_LOTTIE ON CACHE BOOL "" FORCE)
+set(TVG_LOADER_TTF ON CACHE BOOL "" FORCE)
+set(TVG_LOADER_WEBP OFF CACHE BOOL "" FORCE)
 
-if(NOT TARGET ncbind)
-add_subdirectory(../ncbind ${CMAKE_CURRENT_BINARY_DIR}/ncbind)
-endif()
+# Disable savers and tools
+set(TVG_SAVER_GIF OFF CACHE BOOL "" FORCE)
+set(TVG_TOOL_SVG2PNG OFF CACHE BOOL "" FORCE)
+set(TVG_TOOL_LOTTIE2GIF OFF CACHE BOOL "" FORCE)
 
-add_library(${PROJECT_NAME} SHARED
-	LayerExDraw.cpp
-	Path.cpp
-	main.cpp
-)
+# Disable bindings and tests
+set(TVG_BINDINGS_CAPI OFF CACHE BOOL "" FORCE)
+set(TVG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC
-    ncbind
+# Add ThorVG subdirectory
+add_subdirectory(thorvg)
+
+krkrz_plugin(layerExVG
+    NCBIND
+    SOURCES
+        LayerExDraw.cpp
+        main.cpp
+    LIBRARIES
+        thorvg
 )

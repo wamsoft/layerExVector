@@ -12,7 +12,7 @@ endif
 
 # Detect OS and set default PRESET accordingly
 ifeq ($(OS),Windows_NT)
-	PRESET?=x64-windows
+	PRESET?=x86-windows
 else
 	UNAME_S := $(shell uname -s)
 	UNAME_M := $(shell uname -m)

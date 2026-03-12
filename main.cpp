@@ -366,11 +366,34 @@ NCB_REGISTER_SUBCLASS(FontInfo) {
 	NCB_PROPERTY_RO(lineSpacing, getLineSpacing);
 };
 
+static int32_t Appearance_addBrush(tTJSVariant *r, tjs_int n, tTJSVariant **p, Appearance* self)
+{
+	if (n < 1) return TJS_E_BADPARAMCOUNT;
+	if (!self) return TJS_E_NATIVECLASSCRASH;
+	tTJSVariant colorOrBrush = *p[0];
+	REAL ox = (n >= 2) ? (REAL)(tjs_real)*p[1] : 0;
+	REAL oy = (n >= 3) ? (REAL)(tjs_real)*p[2] : 0;
+	self->addBrush(colorOrBrush, ox, oy);
+	return TJS_S_OK;
+}
+
+static int32_t Appearance_addPen(tTJSVariant *r, tjs_int n, tTJSVariant **p, Appearance* self)
+{
+	if (n < 1) return TJS_E_BADPARAMCOUNT;
+	if (!self) return TJS_E_NATIVECLASSCRASH;
+	tTJSVariant colorOrBrush = *p[0];
+	tTJSVariant widthOrOption = (n >= 2) ? *p[1] : tTJSVariant((tjs_real)1.0);
+	REAL ox = (n >= 3) ? (REAL)(tjs_real)*p[2] : 0;
+	REAL oy = (n >= 4) ? (REAL)(tjs_real)*p[3] : 0;
+	self->addPen(colorOrBrush, widthOrOption, ox, oy);
+	return TJS_S_OK;
+}
+
 NCB_REGISTER_SUBCLASS(Appearance) {
 	NCB_CONSTRUCTOR(());
 	NCB_METHOD(clear);
-	NCB_METHOD(addBrush);
-	NCB_METHOD(addPen);
+	RawCallback(TJS_W("addBrush"), Appearance_addBrush, 0);
+	RawCallback(TJS_W("addPen"), Appearance_addPen, 0);
 };
 
 NCB_REGISTER_SUBCLASS(Path) {

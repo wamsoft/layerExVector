@@ -501,6 +501,9 @@ protected:
     // thorvg キャンバス
     tvg::SwCanvas* canvas;
 
+    // ビットマップ上下反転フラグ（pitch が負の場合 true）
+    bool flipped;
+
     // Transform 指定
     Matrix transform;
     Matrix viewTransform;

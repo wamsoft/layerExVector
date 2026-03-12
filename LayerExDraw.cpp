@@ -859,7 +859,7 @@ RectF Path::getBounds() const
 
 LayerExDraw::LayerExDraw(DispatchT obj)
     : layerExBase(obj), width(-1), height(-1), pitch(0), buffer(NULL),
-      canvas(NULL),
+      canvas(NULL), flipped(false),
       clipLeft(-1), clipTop(-1), clipWidth(-1), clipHeight(-1),
       smoothingMode(4), // SmoothingModeAntiAlias
       updateWhenDraw(true)
@@ -894,11 +894,19 @@ void LayerExDraw::reset()
         height = _height;
         pitch = _pitch;
         buffer = _buffer;
+        flipped = (pitch < 0);
         
         canvas = tvg::SwCanvas::gen();
         if (canvas) {
-            // ARGB8888 として設定（吉里吉里のレイヤはこの形式）
-            canvas->target((uint32_t*)buffer, width, width, height, tvg::ColorSpace::ARGB8888);
+            if (flipped) {
+                // pitch が負の場合、メモリが上下反転しているので順方向に補正
+                uint32_t absPitch = (uint32_t)(-pitch);
+                uint32_t stridePixels = absPitch / (uint32_t)sizeof(uint32_t);
+                uint8_t* canvasBuffer = buffer + (height - 1) * pitch;
+                canvas->target((uint32_t*)canvasBuffer, stridePixels, width, height, tvg::ColorSpace::ARGB8888);
+            } else {
+                canvas->target((uint32_t*)buffer, width, width, height, tvg::ColorSpace::ARGB8888);
+            }
         }
         
         clipWidth = clipHeight = -1;
@@ -915,7 +923,12 @@ void LayerExDraw::reset()
         clipHeight = _clipHeight;
         
         if (canvas) {
-            canvas->viewport(clipLeft, clipTop, clipWidth, clipHeight);
+            if (flipped) {
+                // 上下反転時は viewport の Y 座標も反転
+                canvas->viewport(clipLeft, height - clipTop - clipHeight, clipWidth, clipHeight);
+            } else {
+                canvas->viewport(clipLeft, clipTop, clipWidth, clipHeight);
+            }
         }
     }
 }
@@ -923,7 +936,9 @@ void LayerExDraw::reset()
 void LayerExDraw::updateRect(RectF &rect)
 {
     if (updateWhenDraw) {
-        tTJSVariant vars[4] = { rect.X, rect.Y, rect.Width, rect.Height };
+        // 上下反転時は更新矩形の Y 座標を反転
+        REAL y = flipped ? (REAL)(height - rect.Y - rect.Height) : rect.Y;
+        tTJSVariant vars[4] = { rect.X, y, rect.Width, rect.Height };
         tTJSVariant *varsp[4] = { vars, vars+1, vars+2, vars+3 };
         _pUpdate(4, varsp);
     }
@@ -934,6 +949,11 @@ void LayerExDraw::updateViewTransform()
     calcTransform.Reset();
     calcTransform.Multiply(&transform, MatrixOrderAppend);
     calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
+    if (flipped) {
+        // 上下反転: Y軸を反転して height 分オフセット
+        calcTransform.Scale(1, -1, MatrixOrderAppend);
+        calcTransform.Translate(0, (REAL)height, MatrixOrderAppend);
+    }
 }
 
 void LayerExDraw::setViewTransform(const Matrix *trans)
@@ -974,6 +994,11 @@ void LayerExDraw::updateTransform()
     calcTransform.Reset();
     calcTransform.Multiply(&transform, MatrixOrderAppend);
     calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
+    if (flipped) {
+        // 上下反転: Y軸を反転して height 分オフセット
+        calcTransform.Scale(1, -1, MatrixOrderAppend);
+        calcTransform.Translate(0, (REAL)height, MatrixOrderAppend);
+    }
 }
 
 void LayerExDraw::setTransform(const Matrix *trans)

@@ -541,7 +541,6 @@ public:
     // ------------------------------------------------------------------
 
 protected:
-    void updateViewTransform();
     void updateTransform();
     
 public:

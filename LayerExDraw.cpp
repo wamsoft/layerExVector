@@ -11,7 +11,8 @@
 // thorvg 初期化
 void initThorvg()
 {
-    tvg::Initializer::init(0);
+    // 利用するスレッド数を指定 (0 ならメインスレッドのみ、1 以上ならその数だけワーカースレッドを起動)
+    tvg::Initializer::init(4);
 }
 
 // thorvg 終了
@@ -931,6 +932,8 @@ void LayerExDraw::reset()
             }
         }
     }
+
+    updateTransform();
 }
 
 void LayerExDraw::updateRect(RectF &rect)
@@ -944,16 +947,16 @@ void LayerExDraw::updateRect(RectF &rect)
     }
 }
 
-void LayerExDraw::updateViewTransform()
+void LayerExDraw::updateTransform()
 {
     calcTransform.Reset();
-    calcTransform.Multiply(&transform, MatrixOrderAppend);
-    calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
     if (flipped) {
         // 上下反転: Y軸を反転して height 分オフセット
         calcTransform.Scale(1, -1, MatrixOrderAppend);
-        calcTransform.Translate(0, (REAL)height, MatrixOrderAppend);
+        calcTransform.Translate(0, -(REAL)height, MatrixOrderAppend);
     }
+    calcTransform.Multiply(&transform, MatrixOrderAppend);
+    calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
 }
 
 void LayerExDraw::setViewTransform(const Matrix *trans)
@@ -961,44 +964,32 @@ void LayerExDraw::setViewTransform(const Matrix *trans)
     if (!viewTransform.Equals(trans)) {
         viewTransform.Reset();
         viewTransform.Multiply(trans);
-        updateViewTransform();
+        updateTransform();
     }
 }
 
 void LayerExDraw::resetViewTransform()
 {
     viewTransform.Reset();
-    updateViewTransform();
+    updateTransform();
 }
 
 void LayerExDraw::rotateViewTransform(REAL angle)
 {
     viewTransform.Rotate(angle, MatrixOrderAppend);
-    updateViewTransform();
+    updateTransform();
 }
 
 void LayerExDraw::scaleViewTransform(REAL sx, REAL sy)
 {
     viewTransform.Scale(sx, sy, MatrixOrderAppend);
-    updateViewTransform();
+    updateTransform();
 }
 
 void LayerExDraw::translateViewTransform(REAL dx, REAL dy)
 {
     viewTransform.Translate(dx, dy, MatrixOrderAppend);
-    updateViewTransform();
-}
-
-void LayerExDraw::updateTransform()
-{
-    calcTransform.Reset();
-    calcTransform.Multiply(&transform, MatrixOrderAppend);
-    calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
-    if (flipped) {
-        // 上下反転: Y軸を反転して height 分オフセット
-        calcTransform.Scale(1, -1, MatrixOrderAppend);
-        calcTransform.Translate(0, (REAL)height, MatrixOrderAppend);
-    }
+    updateTransform();
 }
 
 void LayerExDraw::setTransform(const Matrix *trans)

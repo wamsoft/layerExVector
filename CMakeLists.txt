@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
+add_compile_options("$<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/utf-8>")
+add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/Zc:__cplusplus>")
+# ignore warnings
+add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/wd4819>")
+add_compile_definitions("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:_CRT_SECURE_NO_WARNINGS>")
+
 include(../tp_stub/krkrz.cmake)
 
 # ThorVG configuration - static library, SW engine only
@@ -42,4 +48,10 @@ krkrz_plugin(layerExVG
         main.cpp
     LIBRARIES
         thorvg
+)
+
+# thorvg の フォントオブジェクトを直接参照するため細工
+target_include_directories(layerExVG PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/thorvg/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/thorvg/src/renderer
 )

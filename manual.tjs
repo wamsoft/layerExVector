@@ -7,12 +7,6 @@
  */
 class GdiPlus {
 
-	// FontStyle 定義
-	const FontStyleBold = 1;
-	const FontStyleItalic = 2;
-	const FontStyleUnderline = 4;
-	const FontStyleStrikeout = 8;
-
 	// BrushType定義
 	const BrushTypeSolidColor = 0;
     const BrushTypePathGradient = 3;
@@ -36,35 +30,29 @@ class GdiPlus {
 
 	/**
 	 * フォント情報
+	 * TTF/OTFフォントファイルを直接指定して使用します
 	 */
 	class Font {
 		/**
 		 * コンストラクタ
-		 * @param familyName フォントファミリー
+		 * @param fontPath フォントファイルへのパス（TTF/OTFファイル）
 		 * @param emSize フォントのサイズ
-		 * @param style フォントスタイル
 		 */
-		function Font(familyName, emSize, style);
+		function Font(fontPath, emSize);
 		
-		// フォントファミリー
-		property familyName;
+		// フォントファイルパス
+		property fontPath;
 		// フォントのサイズ
 		property emSize;
-		// フォントのスタイル
-		property style;
 
 		// ascent (読み出し専用)
 		property ascent;
 		// descent (読み出し専用)
 		property descent;
-		// 行間の長さ (読み出し専用)。
+		// 行間の長さ (読み出し専用)
 		property lineSpacing;
-		// ascent側のinternalLeading(読み出し専用)
-        property ascentLeading;
-        // descent側のinternalLeading(読み出し専用)
-        property descentLeading;
-        // ascent + descent は lineSpacing に等しい。
-        // lineSpacing - ( ascentLeading + descentLeading ) は emSize に等しい。
+		// フォントが正常に読み込まれているか (読み出し専用)
+		property isLoaded;
 	};
 
 	/**
@@ -580,19 +568,6 @@ class Layer {
 	 * @return 更新領域情報(RectF)
 	 */
 	function drawRectangles(app, rects);
-	
-	/**
-	 * 文字列のパスベースでの描画
-	 * @param font フォント GdiPlus.Font でフォントを指定します
-	 * @param app アピアランス GdiPlus.Appearance で描画スタイルを指定します
-	 * @param x 描画位置X
-	 * @param y 描画位置Y
-	 * @param text 描画テキスト
-	 * @return 更新領域情報(RectF)
-	 */
-	function drawPathString(font, app, x, y, text);
-
-	// -------------------------------------------------------------
 
 	/**
 	 * 文字列の描画

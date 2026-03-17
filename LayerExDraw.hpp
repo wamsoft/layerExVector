@@ -22,14 +22,6 @@ typedef int BOOL;
 // GDIPlus 互換 enum 定義
 // --------------------------------------------------------
 
-// フォントスタイル
-enum FontStyle {
-    FontStyleBold       = 1,
-    FontStyleItalic     = 2,
-    FontStyleUnderline  = 4,
-    FontStyleStrikeout  = 8
-};
-
 // ブラシタイプ
 enum BrushType {
     BrushTypeSolidColor     = 0,
@@ -328,45 +320,95 @@ public:
     const tvg::Matrix& getTvgMatrix() const { return m; }
 };
 
+// 前方宣言 (thorvg 内部構造体)
+struct TtfReader;
+
+// 前方宣言
+class Path;
+
 /**
- * フォント情報
+ * フォント情報（ThorVG TtfReader ベース）
+ * フォントファイルを直接指定して使用します
  */
 class FontInfo {
     friend class LayerExDraw;
     friend class Path;
 
 protected:
-    ttstr familyName;
-    REAL emSize;
-    INT style;
+    ttstr fontPath;          // フォントファイルパス
+    REAL emSize;             // フォントサイズ
     mutable bool propertyModified;
     mutable REAL ascent;
     mutable REAL descent;
     mutable REAL lineSpacing;
-    mutable REAL ascentLeading;
-    mutable REAL descentLeading;
+    
+    // TtfReader 関連
+    mutable TtfReader* ttfReader;
+    mutable uint8_t* fontData;
+    mutable uint32_t fontDataSize;
+    mutable bool fontLoaded;
 
     void clear();
     void updateSizeParams() const;
+    bool loadFontFile() const;
 
 public:
     FontInfo();
-    FontInfo(const tjs_char *familyName, REAL emSize, INT style);
+    
+    /**
+     * コンストラクタ
+     * @param fontPath フォントファイルパス（TTF/OTFファイル）
+     * @param emSize フォントサイズ
+     */
+    FontInfo(const tjs_char *fontPath, REAL emSize);
     FontInfo(const FontInfo &orig);
     virtual ~FontInfo();
 
-    void setFamilyName(const tjs_char *familyName);
-    const tjs_char *getFamilyName() { return familyName.c_str(); }
+    /**
+     * フォントファイルパスを設定
+     * @param fontPath TTF/OTFファイルへのパス
+     */
+    void setFontPath(const tjs_char *fontPath);
+    const tjs_char *getFontPath() { return fontPath.c_str(); }
+    
     void setEmSize(REAL emSize) { this->emSize = emSize; propertyModified = true; }
     REAL getEmSize() { return emSize; }
-    void setStyle(INT style) { this->style = style; propertyModified = true; }
-    INT getStyle() { return style; }
 
     REAL getAscent() const;
     REAL getDescent() const;
-    REAL getAscentLeading() const;
-    REAL getDescentLeading() const;
     REAL getLineSpacing() const;
+    
+    /**
+     * 文字列のパスを取得
+     * @param text テキスト
+     * @param x 開始X座標
+     * @param y 開始Y座標（ベースライン）
+     * @param path パスデータを格納するPathオブジェクト
+     * @return 成功した場合 true
+     */
+    bool getTextPath(const tjs_char* text, REAL x, REAL y, Path& path) const;
+    
+    /**
+     * 単一文字のパスを取得
+     * @param ch 文字コード
+     * @param x X座標
+     * @param y Y座標（ベースライン）
+     * @param path パスデータを格納するPathオブジェクト
+     * @param advance 次の文字までの進行距離を返すポインタ（NULLの場合は返さない）
+     * @return 成功した場合 true
+     */
+    bool getCharPath(tjs_char ch, REAL x, REAL y, Path& path, REAL* advance = nullptr) const;
+    
+    /**
+     * フォントファイルが正常に読み込まれているか
+     * @return フォントが読み込まれている場合 true
+     */
+    bool isFontLoaded() const;
+    
+    /**
+     * TtfReaderへのアクセス（内部使用）
+     */
+    TtfReader* getTtfReader() const;
 };
 
 /**
@@ -470,6 +512,21 @@ public:
     
     // バウンディングボックスを取得
     RectF getBounds() const;
+    
+    // パスのクリア
+    void clear();
+    
+    // 開始点に移動
+    void moveTo(REAL x, REAL y);
+    
+    // 線分を追加
+    void lineTo(REAL x, REAL y);
+    
+    // 3次ベジェ曲線を追加
+    void cubicTo(REAL cx1, REAL cy1, REAL cx2, REAL cy2, REAL x, REAL y);
+    
+    // 他のパスを追加（オフセット付き）
+    void addPath(const Path& path, REAL offsetX = 0, REAL offsetY = 0);
 
 protected:
     // パスコマンドと点を保持
@@ -747,30 +804,6 @@ public:
 	 * @param text 描画テキスト
 	 * @return 更新領域情報
 	 */
-	RectF drawPathString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text);
-
-	/**
-	 * 文字列の描画(OpenTypeのPostScriptフォント対応)
-	 * @param font フォント
-	 * @param app アピアランス
-	 * @param x 描画位置X
-	 * @param y 描画位置Y
-	 * @param text 描画テキスト
-	 * @return 更新領域情報
-	 */
-	RectF drawPathString2(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text);
-
-	// -------------------------------------------------------------------------------
-	
-	/**
-	 * 文字列の描画
-	 * @param font フォント
-	 * @param app アピアランス
-	 * @param x 描画位置X
-	 * @param y 描画位置Y
-	 * @param text 描画テキスト
-	 * @return 更新領域情報
-	 */
 	RectF drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text);
 
 	/**
@@ -789,21 +822,7 @@ public:
 	 */
 	RectF measureStringInternal(const FontInfo *font, const tjs_char *text);
 
-	/**
-	 * 文字列の描画更新領域情報の取得(OpenTypeのPostScriptフォント対応)
-	 * @param font フォント
-	 * @param text 描画テキスト
-	 * @return 更新領域情報の辞書 left, top, width, height
-	 */
-	RectF measureString2(const FontInfo *font, const tjs_char *text);
 
-	/**
-	 * 文字列にぴったりと接っする矩形の取得(OpenTypeのPostScriptフォント対応)
-	 * @param font フォント
-	 * @param text 描画テキスト
-	 * @return 領域情報の辞書 left, top, width, height
-	 */
-	RectF measureStringInternal2(const FontInfo *font, const tjs_char *text);
 
 	// -----------------------------------------------------------------------------
 	

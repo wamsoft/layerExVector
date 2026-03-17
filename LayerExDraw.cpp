@@ -3,6 +3,10 @@
 #include <vector>
 #include <stdio.h>
 #include <cmath>
+#include <map>
+
+// ThorVG 内部ヘッダー（TtfReader 使用のため）
+#include "thorvg/src/loaders/ttf/tvgTtfReader.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -64,34 +68,32 @@ static void getReals(const tTJSVariant &var, vector<REAL> &points)
 }
 
 // --------------------------------------------------------
-// フォント情報
+// フォント情報（TtfReader ベース）
 // --------------------------------------------------------
 
-FontInfo::FontInfo() : emSize(12), style(0), propertyModified(true),
-    ascent(0), descent(0), lineSpacing(0), ascentLeading(0), descentLeading(0)
+FontInfo::FontInfo() : emSize(12), propertyModified(true),
+    ascent(0), descent(0), lineSpacing(0),
+    ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
 {
 }
 
-FontInfo::FontInfo(const tjs_char *familyName, REAL emSize, INT style)
+FontInfo::FontInfo(const tjs_char *fontPath, REAL emSize)
     : propertyModified(true), ascent(0), descent(0), lineSpacing(0),
-      ascentLeading(0), descentLeading(0)
+      ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
 {
-    setFamilyName(familyName);
+    setFontPath(fontPath);
     setEmSize(emSize);
-    setStyle(style);
 }
 
 FontInfo::FontInfo(const FontInfo &orig)
+    : ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
 {
-    familyName = orig.familyName;
+    fontPath = orig.fontPath;
     emSize = orig.emSize;
-    style = orig.style;
-    propertyModified = orig.propertyModified;
+    propertyModified = true; // 新しいインスタンスなので再読み込みが必要
     ascent = orig.ascent;
     descent = orig.descent;
     lineSpacing = orig.lineSpacing;
-    ascentLeading = orig.ascentLeading;
-    descentLeading = orig.descentLeading;
 }
 
 FontInfo::~FontInfo()
@@ -101,18 +103,105 @@ FontInfo::~FontInfo()
 
 void FontInfo::clear()
 {
-    familyName = L"";
+    if (ttfReader) {
+        delete ttfReader;
+        ttfReader = nullptr;
+    }
+    if (fontData) {
+        delete[] fontData;
+        fontData = nullptr;
+    }
+    fontDataSize = 0;
+    fontLoaded = false;
+    fontPath = L"";
     propertyModified = true;
 }
 
-void FontInfo::setFamilyName(const tjs_char *name)
+void FontInfo::setFontPath(const tjs_char *path)
 {
-    propertyModified = true;
-    if (name) {
-        familyName = name;
-    } else {
-        familyName = L"";
+    if (path && fontPath != path) {
+        // フォントパスが変更された場合、リソースを解放
+        if (ttfReader) {
+            delete ttfReader;
+            ttfReader = nullptr;
+        }
+        if (fontData) {
+            delete[] fontData;
+            fontData = nullptr;
+        }
+        fontDataSize = 0;
+        fontLoaded = false;
+        fontPath = path;
+        propertyModified = true;
+    } else if (!path) {
+        clear();
     }
+}
+
+bool FontInfo::loadFontFile() const
+{
+    if (fontLoaded) return true;
+    if (fontPath.length() == 0) return false;
+    
+    // 吉里吉里のパス解決を使用
+    ttstr resolved = TVPGetPlacedPath(fontPath);
+    if (resolved.length() == 0) {
+        resolved = fontPath; // そのまま使用
+    }
+    
+    // ローカルアクセス可能なパスを取得して読み込み
+    ttstr localname(TVPGetLocallyAccessibleName(resolved));
+    
+    IStream* stream = nullptr;
+    
+    if (localname.length()) {
+        // ローカルファイルとして読み込み
+        stream = TVPCreateIStream(localname, TJS_BS_READ);
+    }
+    
+    if (!stream) {
+        // ストリームから読み込む
+        stream = TVPCreateIStream(resolved, TJS_BS_READ);
+    }
+    
+    if (!stream) {
+        return false;
+    }
+    
+    // ファイルサイズ取得
+    STATSTG stat;
+    stream->Stat(&stat, STATFLAG_NONAME);
+    fontDataSize = (uint32_t)stat.cbSize.QuadPart;
+    
+    // データ読み込み
+    fontData = new uint8_t[fontDataSize];
+    ULONG bytesRead;
+    HRESULT hr = stream->Read(fontData, fontDataSize, &bytesRead);
+    stream->Release();
+    
+    if (FAILED(hr) || bytesRead != fontDataSize) {
+        delete[] fontData;
+        fontData = nullptr;
+        fontDataSize = 0;
+        return false;
+    }
+    
+    // TtfReader を初期化
+    ttfReader = new TtfReader();
+    ttfReader->data = fontData;
+    ttfReader->size = fontDataSize;
+    
+    if (!ttfReader->header()) {
+        delete ttfReader;
+        ttfReader = nullptr;
+        delete[] fontData;
+        fontData = nullptr;
+        fontDataSize = 0;
+        return false;
+    }
+    
+    fontLoaded = true;
+    return true;
 }
 
 void FontInfo::updateSizeParams() const
@@ -122,59 +211,22 @@ void FontInfo::updateSizeParams() const
 
     propertyModified = false;
     
-    // Windows GDI を使用してフォントメトリクスを取得
-    HDC dc = ::CreateCompatibleDC(NULL);
-    if (dc == NULL) {
+    // フォントファイルを読み込み
+    if (!loadFontFile()) {
         // デフォルト値を設定
         ascent = emSize * 0.8f;
         descent = emSize * 0.2f;
         lineSpacing = emSize;
-        ascentLeading = 0;
-        descentLeading = 0;
         return;
     }
-
-    LOGFONTW font;
-    memset(&font, 0, sizeof(font));
-    font.lfHeight = (LONG)(-emSize);
-    font.lfWeight = (style & FontStyleBold) ? FW_BOLD : FW_REGULAR;
-    font.lfItalic = (style & FontStyleItalic) ? TRUE : FALSE;
-    font.lfUnderline = (style & FontStyleUnderline) ? TRUE : FALSE;
-    font.lfStrikeOut = (style & FontStyleStrikeout) ? TRUE : FALSE;
-    font.lfCharSet = DEFAULT_CHARSET;
-    wcsncpy_s(font.lfFaceName, familyName.c_str(), LF_FACESIZE - 1);
-
-    HFONT hFont = CreateFontIndirectW(&font);
-    if (hFont == NULL) {
-        DeleteDC(dc);
-        ascent = emSize * 0.8f;
-        descent = emSize * 0.2f;
-        lineSpacing = emSize;
-        ascentLeading = 0;
-        descentLeading = 0;
-        return;
-    }
-
-    HGDIOBJ hOldFont = SelectObject(dc, hFont);
     
-    TEXTMETRICW tm;
-    if (GetTextMetricsW(dc, &tm)) {
-        ascent = (REAL)tm.tmAscent;
-        descent = (REAL)tm.tmDescent;
-        lineSpacing = (REAL)tm.tmHeight;
-        ascentLeading = (REAL)tm.tmInternalLeading;
-        descentLeading = 0;
-    } else {
-        ascent = emSize * 0.8f;
-        descent = emSize * 0.2f;
-        lineSpacing = emSize;
-        ascentLeading = 0;
-        descentLeading = 0;
-    }
-
-    SelectObject(dc, hOldFont);
-    DeleteObject(hFont);
-    DeleteDC(dc);
+    // TtfReader からメトリクスを取得
+    // unitsPerEm を使用してスケーリング
+    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
+    
+    ascent = ttfReader->metrics.hhea.ascent * scale;
+    descent = -ttfReader->metrics.hhea.descent * scale; // descent は通常負の値
+    lineSpacing = ttfReader->metrics.hhea.advance * scale;
 }
 
 REAL FontInfo::getAscent() const
@@ -189,22 +241,140 @@ REAL FontInfo::getDescent() const
     return descent;
 }
 
-REAL FontInfo::getAscentLeading() const
-{
-    updateSizeParams();
-    return ascentLeading;
-}
-
-REAL FontInfo::getDescentLeading() const
-{
-    updateSizeParams();
-    return descentLeading;
-}
-
 REAL FontInfo::getLineSpacing() const
 {
     updateSizeParams();
     return lineSpacing;
+}
+
+bool FontInfo::isFontLoaded() const
+{
+    return fontLoaded || loadFontFile();
+}
+
+TtfReader* FontInfo::getTtfReader() const
+{
+    if (!fontLoaded) {
+        loadFontFile();
+    }
+    return ttfReader;
+}
+
+bool FontInfo::getCharPath(tjs_char ch, REAL x, REAL y, ::Path& path, REAL* advance) const
+{
+    if (!loadFontFile() || !ttfReader) {
+        return false;
+    }
+    
+    // グリフメトリクスを取得
+    TtfGlyphMetrics tgm;
+    uint32_t glyphOffset = ttfReader->glyph((uint32_t)ch, &tgm);
+    
+    if (tgm.idx == INVALID_GLYPH) {
+        return false;
+    }
+    
+    // スケーリング係数
+    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
+    
+    // RenderPath を使用してグリフのパスを取得
+    RenderPath renderPath;
+    tvg::Point offset = {0.0f, 0.0f};
+    
+    if (glyphOffset != 0) {
+        TtfGlyph glyph;
+        glyph.idx = tgm.idx;
+        glyph.advance = tgm.advance;
+        glyph.lsb = tgm.lsb;
+        glyph.y = tgm.y;
+        glyph.w = tgm.w;
+        glyph.h = tgm.h;
+        
+        ttfReader->convert(renderPath, glyph, glyphOffset, offset, 1);
+    }
+    
+    // RenderPath から Path へ変換（スケーリングとオフセット適用）
+    size_t ptIdx = 0;
+    for (uint32_t i = 0; i < renderPath.cmds.count; i++) {
+        switch (renderPath.cmds[i]) {
+            case tvg::PathCommand::MoveTo: {
+                REAL px = x + renderPath.pts[ptIdx].x * scale;
+                REAL py = y - renderPath.pts[ptIdx].y * scale; // Y軸反転
+                path.moveTo(px, py);
+                ptIdx++;
+                break;
+            }
+            case tvg::PathCommand::LineTo: {
+                REAL px = x + renderPath.pts[ptIdx].x * scale;
+                REAL py = y - renderPath.pts[ptIdx].y * scale;
+                path.lineTo(px, py);
+                ptIdx++;
+                break;
+            }
+            case tvg::PathCommand::CubicTo: {
+                REAL cx1 = x + renderPath.pts[ptIdx].x * scale;
+                REAL cy1 = y - renderPath.pts[ptIdx].y * scale;
+                REAL cx2 = x + renderPath.pts[ptIdx + 1].x * scale;
+                REAL cy2 = y - renderPath.pts[ptIdx + 1].y * scale;
+                REAL px = x + renderPath.pts[ptIdx + 2].x * scale;
+                REAL py = y - renderPath.pts[ptIdx + 2].y * scale;
+                path.cubicTo(cx1, cy1, cx2, cy2, px, py);
+                ptIdx += 3;
+                break;
+            }
+            case tvg::PathCommand::Close: {
+                path.closeFigure();
+                break;
+            }
+        }
+    }
+    
+    // 進行幅を返す
+    if (advance) {
+        *advance = tgm.advance * scale;
+    }
+    
+    return true;
+}
+
+bool FontInfo::getTextPath(const tjs_char* text, REAL x, REAL y, ::Path& path) const
+{
+    if (!text || !loadFontFile() || !ttfReader) {
+        return false;
+    }
+    
+    REAL cursorX = x;
+    uint32_t prevGlyphIdx = INVALID_GLYPH;
+    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
+    
+    while (*text) {
+        tjs_char ch = *text++;
+        
+        // カーニング適用
+        if (prevGlyphIdx != INVALID_GLYPH) {
+            TtfGlyphMetrics curGm;
+            ttfReader->glyph((uint32_t)ch, &curGm);
+            if (curGm.idx != INVALID_GLYPH) {
+                tvg::Point kerning = {0, 0};
+                ttfReader->kerning(prevGlyphIdx, curGm.idx, kerning);
+                cursorX += kerning.x * scale;
+            }
+        }
+        
+        REAL advance = 0;
+        if (getCharPath(ch, cursorX, y, path, &advance)) {
+            cursorX += advance;
+            
+            // 現在のグリフインデックスを保存
+            TtfGlyphMetrics tgm;
+            ttfReader->glyph((uint32_t)ch, &tgm);
+            prevGlyphIdx = tgm.idx;
+        } else {
+            prevGlyphIdx = INVALID_GLYPH;
+        }
+    }
+    
+    return true;
 }
 
 // --------------------------------------------------------
@@ -854,6 +1024,89 @@ RectF Path::getBounds() const
     return RectF(minX, minY, maxX - minX, maxY - minY);
 }
 
+void Path::clear()
+{
+    commands.clear();
+    points.clear();
+    currentPos.x = 0;
+    currentPos.y = 0;
+    figureStartPos.x = 0;
+    figureStartPos.y = 0;
+    figureStarted = false;
+}
+
+void Path::moveTo(REAL x, REAL y)
+{
+    currentPos.x = x;
+    currentPos.y = y;
+    commands.push_back(tvg::PathCommand::MoveTo);
+    points.push_back(currentPos);
+    figureStartPos = currentPos;
+    figureStarted = true;
+}
+
+void Path::lineTo(REAL x, REAL y)
+{
+    ensureFigureStarted();
+    commands.push_back(tvg::PathCommand::LineTo);
+    tvg::Point p = {x, y};
+    points.push_back(p);
+    currentPos = p;
+}
+
+void Path::cubicTo(REAL cx1, REAL cy1, REAL cx2, REAL cy2, REAL x, REAL y)
+{
+    ensureFigureStarted();
+    commands.push_back(tvg::PathCommand::CubicTo);
+    tvg::Point cp1 = {cx1, cy1};
+    tvg::Point cp2 = {cx2, cy2};
+    tvg::Point ep = {x, y};
+    points.push_back(cp1);
+    points.push_back(cp2);
+    points.push_back(ep);
+    currentPos = ep;
+}
+
+void Path::addPath(const Path& other, REAL offsetX, REAL offsetY)
+{
+    // 他のパスのコマンドと点を追加（オフセット付き）
+    size_t ptIdx = 0;
+    for (size_t i = 0; i < other.commands.size(); i++) {
+        commands.push_back(other.commands[i]);
+        
+        switch (other.commands[i]) {
+            case tvg::PathCommand::MoveTo:
+            case tvg::PathCommand::LineTo: {
+                tvg::Point p = {other.points[ptIdx].x + offsetX, other.points[ptIdx].y + offsetY};
+                points.push_back(p);
+                currentPos = p;
+                if (other.commands[i] == tvg::PathCommand::MoveTo) {
+                    figureStartPos = p;
+                    figureStarted = true;
+                }
+                ptIdx++;
+                break;
+            }
+            case tvg::PathCommand::CubicTo: {
+                tvg::Point cp1 = {other.points[ptIdx].x + offsetX, other.points[ptIdx].y + offsetY};
+                tvg::Point cp2 = {other.points[ptIdx + 1].x + offsetX, other.points[ptIdx + 1].y + offsetY};
+                tvg::Point ep = {other.points[ptIdx + 2].x + offsetX, other.points[ptIdx + 2].y + offsetY};
+                points.push_back(cp1);
+                points.push_back(cp2);
+                points.push_back(ep);
+                currentPos = ep;
+                ptIdx += 3;
+                break;
+            }
+            case tvg::PathCommand::Close: {
+                currentPos = figureStartPos;
+                figureStarted = false;
+                break;
+            }
+        }
+    }
+}
+
 // --------------------------------------------------------
 // LayerExDraw クラス
 // --------------------------------------------------------
@@ -959,7 +1212,7 @@ void LayerExDraw::updateTransform()
     calcTransform.Multiply(&viewTransform, MatrixOrderAppend);
 }
 
-void LayerExDraw::setViewTransform(const Matrix *trans)
+void LayerExDraw::setViewTransform(const ::Matrix *trans)
 {
     if (!viewTransform.Equals(trans)) {
         viewTransform.Reset();
@@ -992,7 +1245,7 @@ void LayerExDraw::translateViewTransform(REAL dx, REAL dy)
     updateTransform();
 }
 
-void LayerExDraw::setTransform(const Matrix *trans)
+void LayerExDraw::setTransform(const ::Matrix *trans)
 {
     if (!transform.Equals(trans)) {
         transform.Reset();
@@ -1139,7 +1392,7 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
     return totalBounds;
 }
 
-RectF LayerExDraw::drawPath(const Appearance *app, const Path *path)
+RectF LayerExDraw::drawPath(const Appearance *app, const ::Path *path)
 {
     if (!path) return RectF();
     
@@ -1158,63 +1411,63 @@ RectF LayerExDraw::drawPath(const Appearance *app, const Path *path)
 
 RectF LayerExDraw::drawArc(const Appearance *app, REAL x, REAL y, REAL width, REAL height, REAL startAngle, REAL sweepAngle)
 {
-    Path path;
+    ::Path path;
     path.drawArc(x, y, width, height, startAngle, sweepAngle);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawPie(const Appearance *app, REAL x, REAL y, REAL width, REAL height, REAL startAngle, REAL sweepAngle)
 {
-    Path path;
+    ::Path path;
     path.drawPie(x, y, width, height, startAngle, sweepAngle);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawBezier(const Appearance *app, REAL x1, REAL y1, REAL x2, REAL y2, REAL x3, REAL y3, REAL x4, REAL y4)
 {
-    Path path;
+    ::Path path;
     path.drawBezier(x1, y1, x2, y2, x3, y3, x4, y4);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawBeziers(const Appearance *app, tTJSVariant points)
 {
-    Path path;
+    ::Path path;
     path.drawBeziers(points);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawClosedCurve(const Appearance *app, tTJSVariant points)
 {
-    Path path;
+    ::Path path;
     path.drawClosedCurve(points);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawClosedCurve2(const Appearance *app, tTJSVariant points, REAL tension)
 {
-    Path path;
+    ::Path path;
     path.drawClosedCurve2(points, tension);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawCurve(const Appearance *app, tTJSVariant points)
 {
-    Path path;
+    ::Path path;
     path.drawCurve(points);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawCurve2(const Appearance *app, tTJSVariant points, REAL tension)
 {
-    Path path;
+    ::Path path;
     path.drawCurve2(points, tension);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawCurve3(const Appearance *app, tTJSVariant points, int offset, int numberOfSegments, REAL tension)
 {
-    Path path;
+    ::Path path;
     path.drawCurve3(points, offset, numberOfSegments, tension);
     return drawPath(app, &path);
 }
@@ -1228,21 +1481,21 @@ RectF LayerExDraw::drawEllipse(const Appearance *app, REAL x, REAL y, REAL width
 
 RectF LayerExDraw::drawLine(const Appearance *app, REAL x1, REAL y1, REAL x2, REAL y2)
 {
-    Path path;
+    ::Path path;
     path.drawLine(x1, y1, x2, y2);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawLines(const Appearance *app, tTJSVariant points)
 {
-    Path path;
+    ::Path path;
     path.drawLines(points);
     return drawPath(app, &path);
 }
 
 RectF LayerExDraw::drawPolygon(const Appearance *app, tTJSVariant points)
 {
-    Path path;
+    ::Path path;
     path.drawPolygon(points);
     return drawPath(app, &path);
 }
@@ -1267,113 +1520,84 @@ RectF LayerExDraw::drawRectangles(const Appearance *app, tTJSVariant rects)
     return drawShapeWithAppearance(app, shape);
 }
 
-RectF LayerExDraw::drawPathString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
+RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
 {
-    // thorvg の Text を使用してテキストを描画
-    // 注: thorvg はフォントサポートが限定的なため、基本的な実装
+    // TtfReader を使ってテキストのパスを取得して描画
     if (!canvas || !font || !text) return RectF();
     
-    tvg::Text* tvgText = tvg::Text::gen();
-    if (!tvgText) {
-        THROW_NOT_IMPLEMENTED();
+    // フォントからテキストパスを取得
+    ::Path textPath;
+    if (!font->getTextPath(text, x, y, textPath)) {
         return RectF();
     }
     
-    // UTF-16 から UTF-8 に変換
-    std::string utf8Text;
-    const tjs_char* p = text;
-    while (*p) {
-        tjs_char ch = *p++;
-        if (ch < 0x80) {
-            utf8Text += (char)ch;
-        } else if (ch < 0x800) {
-            utf8Text += (char)(0xC0 | (ch >> 6));
-            utf8Text += (char)(0x80 | (ch & 0x3F));
-        } else {
-            utf8Text += (char)(0xE0 | (ch >> 12));
-            utf8Text += (char)(0x80 | ((ch >> 6) & 0x3F));
-            utf8Text += (char)(0x80 | (ch & 0x3F));
-        }
-    }
-    
-    // フォント名を UTF-8 に変換
-    std::string fontName;
-    const tjs_char* fn = font->familyName.c_str();
-    while (*fn) {
-        tjs_char ch = *fn++;
-        if (ch < 0x80) {
-            fontName += (char)ch;
-        } else if (ch < 0x800) {
-            fontName += (char)(0xC0 | (ch >> 6));
-            fontName += (char)(0x80 | (ch & 0x3F));
-        } else {
-            fontName += (char)(0xE0 | (ch >> 12));
-            fontName += (char)(0x80 | ((ch >> 6) & 0x3F));
-            fontName += (char)(0x80 | (ch & 0x3F));
-        }
-    }
-    
-    tvgText->font(fontName.empty() ? nullptr : fontName.c_str());
-    tvgText->size(font->emSize);
-    tvgText->text(utf8Text.c_str());
-    
-    // 最初のブラシ/ペンの色を使用
-    if (!app->drawInfos.empty()) {
-        const Appearance::DrawInfo& info = app->drawInfos[0];
-        if (info.type == 1) { // フィル
-            tvgText->fill(info.fillR, info.fillG, info.fillB);
-        } else { // ストローク
-            tvgText->fill(info.strokeR, info.strokeG, info.strokeB);
-        }
-    }
-    
-    // 位置を設定
-    tvgText->translate(x, y);
-    
-    // トランスフォームを適用
-    tvgText->transform(calcTransform.getTvgMatrix());
-    
-    canvas->add(tvgText);
-    canvas->draw();
-    canvas->sync();
-    
-    // 簡易的なバウンディングボックス計算
-    RectF rect(x, y, font->emSize * utf8Text.length() * 0.6f, font->getLineSpacing());
-    updateRect(rect);
-    return rect;
-}
-
-RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
-{
-    return drawPathString(font, app, x, y, text);
+    // パスを描画
+    return drawPath(app, &textPath);
 }
 
 RectF LayerExDraw::measureString(const FontInfo *font, const tjs_char *text)
 {
     if (!font || !text) return RectF();
     
-    // 簡易的な文字列サイズ計算
-    size_t len = wcslen(text);
-    REAL width = font->emSize * len * 0.6f;
-    REAL height = font->getLineSpacing();
+    // TtfReader を使って正確なサイズを計算
+    TtfReader* reader = font->getTtfReader();
+    if (!reader) {
+        // フォント読み込み失敗時はデフォルト計算
+        size_t len = wcslen(text);
+        REAL width = font->emSize * len * 0.6f;
+        REAL height = font->getLineSpacing();
+        return RectF(0, 0, width, height);
+    }
     
-    return RectF(0, 0, width, height);
+    REAL scale = font->emSize / (REAL)reader->metrics.unitsPerEm;
+    REAL cursorX = 0;
+    uint32_t prevGlyphIdx = INVALID_GLYPH;
+    
+    const tjs_char* p = text;
+    while (*p) {
+        tjs_char ch = *p++;
+        
+        TtfGlyphMetrics tgm;
+        reader->glyph((uint32_t)ch, &tgm);
+        
+        if (tgm.idx != INVALID_GLYPH) {
+            // カーニング適用
+            if (prevGlyphIdx != INVALID_GLYPH) {
+                tvg::Point kerning = {0, 0};
+                reader->kerning(prevGlyphIdx, tgm.idx, kerning);
+                cursorX += kerning.x * scale;
+            }
+            
+            cursorX += tgm.advance * scale;
+            prevGlyphIdx = tgm.idx;
+        }
+    }
+    
+    return RectF(0, 0, cursorX, font->getLineSpacing());
 }
 
 RectF LayerExDraw::measureStringInternal(const FontInfo *font, const tjs_char *text)
 {
-    return measureString(font, text);
+    if (!font || !text) return RectF();
+    
+    // 実際のグリフバウンディングボックスを計算
+    ::Path textPath;
+    if (!font->getTextPath(text, 0, 0, textPath)) {
+        return measureString(font, text);
+    }
+    
+    return textPath.getBounds();
 }
 
 // --------------------------------------------------------
 // Image クラス
 // --------------------------------------------------------
 
-Image::Image() : picture(nullptr), imgWidth(0), imgHeight(0), loaded(false)
+::Image::Image() : picture(nullptr), imgWidth(0), imgHeight(0), loaded(false)
 {
 }
 
-Image::Image(const Image& orig) : picture(nullptr), imgWidth(orig.imgWidth), imgHeight(orig.imgHeight), loaded(false)
+::Image::Image(const ::Image& orig) : picture(nullptr), imgWidth(orig.imgWidth), imgHeight(orig.imgHeight), loaded(false)
 {
     if (orig.picture && orig.loaded) {
         // ThorVG Picture を複製
@@ -1384,7 +1608,7 @@ Image::Image(const Image& orig) : picture(nullptr), imgWidth(orig.imgWidth), img
     }
 }
 
-Image::~Image()
+::Image::~Image()
 {
     if (picture) {
         tvg::Paint::rel(picture);
@@ -1414,7 +1638,7 @@ static std::string wcharToUtf8(const tjs_char* wstr)
     return utf8;
 }
 
-bool Image::load(const char* filename)
+bool ::Image::load(const char* filename)
 {
     if (picture) {
         tvg::Paint::rel(picture);
@@ -1442,7 +1666,7 @@ bool Image::load(const char* filename)
     return true;
 }
 
-bool Image::load(const tjs_char* filename)
+bool ::Image::load(const tjs_char* filename)
 {
     // 吉里吉里のパス解決を使用
     ttstr resolved = TVPGetPlacedPath(filename);
@@ -1495,7 +1719,7 @@ bool Image::load(const tjs_char* filename)
     return load(dataBuffer.data(), (uint32_t)dataBuffer.size(), mimeType);
 }
 
-bool Image::load(const void* data, uint32_t size, const char* mimeType)
+bool ::Image::load(const void* data, uint32_t size, const char* mimeType)
 {
     if (picture) {
         tvg::Paint::rel(picture);
@@ -1523,7 +1747,7 @@ bool Image::load(const void* data, uint32_t size, const char* mimeType)
     return true;
 }
 
-bool Image::loadRaw(const uint32_t* data, uint32_t w, uint32_t h, bool copy)
+bool ::Image::loadRaw(const uint32_t* data, uint32_t w, uint32_t h, bool copy)
 {
     if (picture) {
         tvg::Paint::rel(picture);
@@ -1546,12 +1770,12 @@ bool Image::loadRaw(const uint32_t* data, uint32_t w, uint32_t h, bool copy)
     return true;
 }
 
-Image* Image::Clone() const
+::Image* ::Image::Clone() const
 {
     return new Image(*this);
 }
 
-void Image::SetSize(float w, float h)
+void ::Image::SetSize(float w, float h)
 {
     if (picture && loaded) {
         picture->size(w, h);
@@ -1561,9 +1785,9 @@ void Image::SetSize(float w, float h)
 }
 
 // グローバルヘルパー関数
-Image* loadImage(const tjs_char* name)
+::Image* loadImage(const tjs_char* name)
 {
-    Image* image = new Image();
+    ::Image* image = new ::Image();
     if (image->load(name)) {
         return image;
     }
@@ -1571,7 +1795,7 @@ Image* loadImage(const tjs_char* name)
     return nullptr;
 }
 
-RectF* getBounds(Image* image)
+RectF* getBounds(::Image* image)
 {
     if (!image) return new RectF(0, 0, 0, 0);
     return new RectF(image->GetBounds());
@@ -1581,7 +1805,7 @@ RectF* getBounds(Image* image)
 // LayerExDraw - Image 描画メソッド
 // --------------------------------------------------------
 
-RectF LayerExDraw::drawImage(REAL x, REAL y, Image* src)
+RectF LayerExDraw::drawImage(REAL x, REAL y, ::Image* src)
 {
     RectF rect;
     if (!src || !src->IsLoaded()) return rect;
@@ -1592,18 +1816,18 @@ RectF LayerExDraw::drawImage(REAL x, REAL y, Image* src)
     return rect;
 }
 
-RectF LayerExDraw::drawImageRect(REAL dleft, REAL dtop, Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight)
+RectF LayerExDraw::drawImageRect(REAL dleft, REAL dtop, ::Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight)
 {
     return drawImageAffine(src, sleft, stop, swidth, sheight, true, 1, 0, 0, 1, dleft, dtop);
 }
 
-RectF LayerExDraw::drawImageStretch(REAL dleft, REAL dtop, REAL dwidth, REAL dheight, Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight)
+RectF LayerExDraw::drawImageStretch(REAL dleft, REAL dtop, REAL dwidth, REAL dheight, ::Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight)
 {
     if (swidth == 0 || sheight == 0) return RectF();
     return drawImageAffine(src, sleft, stop, swidth, sheight, true, dwidth/swidth, 0, 0, dheight/sheight, dleft, dtop);
 }
 
-RectF LayerExDraw::drawImageAffine(Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight, bool affine, REAL A, REAL B, REAL C, REAL D, REAL E, REAL F)
+RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight, bool affine, REAL A, REAL B, REAL C, REAL D, REAL E, REAL F)
 {
     RectF rect;
     if (!canvas || !src || !src->IsLoaded() || !src->getPicture()) return rect;

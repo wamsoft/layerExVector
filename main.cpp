@@ -84,7 +84,6 @@ bool IsArray(const tTJSVariant &var)
 // 型コンバータ登録
 // ------------------------------------------------------
 
-NCB_TYPECONV_CAST_INTEGER(FontStyle);
 NCB_TYPECONV_CAST_INTEGER(BrushType);
 NCB_TYPECONV_CAST_INTEGER(LineCap);
 NCB_TYPECONV_CAST_INTEGER(LineJoin);
@@ -355,15 +354,13 @@ NCB_REGISTER_SUBCLASS(MatrixWrapper)
 // ------------------------------------------------------
 
 NCB_REGISTER_SUBCLASS(FontInfo) {
-	NCB_CONSTRUCTOR((const tjs_char *, REAL, INT));
-	NCB_PROPERTY(familyName, getFamilyName, setFamilyName);
+	NCB_CONSTRUCTOR((const tjs_char *, REAL));
+	NCB_PROPERTY(fontPath, getFontPath, setFontPath);
 	NCB_PROPERTY(emSize, getEmSize, setEmSize);
-	NCB_PROPERTY(style, getStyle, setStyle);
 	NCB_PROPERTY_RO(ascent, getAscent);
 	NCB_PROPERTY_RO(descent, getDescent);
-	NCB_PROPERTY_RO(ascentLeading, getAscentLeading);
-	NCB_PROPERTY_RO(descentLeading, getDescentLeading);
 	NCB_PROPERTY_RO(lineSpacing, getLineSpacing);
+	NCB_PROPERTY_RO(isLoaded, isFontLoaded);
 };
 
 static int32_t Appearance_addBrush(tTJSVariant *r, tjs_int n, tTJSVariant **p, Appearance* self)
@@ -547,12 +544,6 @@ NCB_REGISTER_SUBCLASS(Image) {
 
 NCB_REGISTER_CLASS(GdiPlus)
 {
-	// FontStyle
-	ENUM(FontStyleBold);
-	ENUM(FontStyleItalic);
-	ENUM(FontStyleUnderline);
-	ENUM(FontStyleStrikeout);
-
 	// BrushType
 	ENUM(BrushTypeSolidColor);
 	ENUM(BrushTypePathGradient);
@@ -582,7 +573,7 @@ NCB_REGISTER_CLASS(GdiPlus)
 	
 	NCB_SUBCLASS(Font,FontInfo);
 	NCB_SUBCLASS(Appearance,Appearance);
-	NCB_SUBCLASS(Path,Path);
+	NCB_SUBCLASS_NAME(Path);
 }
 
 NCB_GET_INSTANCE_HOOK(LayerExDraw)
@@ -636,7 +627,6 @@ NCB_ATTACH_CLASS_WITH_HOOK(LayerExDraw, Layer) {
 	NCB_METHOD(drawPolygon);
 	NCB_METHOD(drawRectangle);
 	NCB_METHOD(drawRectangles);
-	NCB_METHOD(drawPathString);
 	NCB_METHOD(drawString);
 	NCB_METHOD(measureString);
 	NCB_METHOD(measureStringInternal);

@@ -1,12 +1,10 @@
 #include "ncbind.hpp"
 #include "LayerExDraw.hpp"
 #include <vector>
+#include <string>
 #include <stdio.h>
 #include <cmath>
 #include <map>
-
-// ThorVG 内部ヘッダー（TtfReader 使用のため）
-#include "thorvg/src/loaders/ttf/tvgTtfReader.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -65,316 +63,6 @@ static void getReals(const tTJSVariant &var, vector<REAL> &points)
     for (int i = 0; i < c; i++) {
         points.push_back((REAL)info.getRealValue(i));
     }
-}
-
-// --------------------------------------------------------
-// フォント情報（TtfReader ベース）
-// --------------------------------------------------------
-
-FontInfo::FontInfo() : emSize(12), propertyModified(true),
-    ascent(0), descent(0), lineSpacing(0),
-    ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
-{
-}
-
-FontInfo::FontInfo(const tjs_char *fontPath, REAL emSize)
-    : propertyModified(true), ascent(0), descent(0), lineSpacing(0),
-      ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
-{
-    setFontPath(fontPath);
-    setEmSize(emSize);
-}
-
-FontInfo::FontInfo(const FontInfo &orig)
-    : ttfReader(nullptr), fontData(nullptr), fontDataSize(0), fontLoaded(false)
-{
-    fontPath = orig.fontPath;
-    emSize = orig.emSize;
-    propertyModified = true; // 新しいインスタンスなので再読み込みが必要
-    ascent = orig.ascent;
-    descent = orig.descent;
-    lineSpacing = orig.lineSpacing;
-}
-
-FontInfo::~FontInfo()
-{
-    clear();
-}
-
-void FontInfo::clear()
-{
-    if (ttfReader) {
-        delete ttfReader;
-        ttfReader = nullptr;
-    }
-    if (fontData) {
-        delete[] fontData;
-        fontData = nullptr;
-    }
-    fontDataSize = 0;
-    fontLoaded = false;
-    fontPath = L"";
-    propertyModified = true;
-}
-
-void FontInfo::setFontPath(const tjs_char *path)
-{
-    if (path && fontPath != path) {
-        // フォントパスが変更された場合、リソースを解放
-        if (ttfReader) {
-            delete ttfReader;
-            ttfReader = nullptr;
-        }
-        if (fontData) {
-            delete[] fontData;
-            fontData = nullptr;
-        }
-        fontDataSize = 0;
-        fontLoaded = false;
-        fontPath = path;
-        propertyModified = true;
-    } else if (!path) {
-        clear();
-    }
-}
-
-bool FontInfo::loadFontFile() const
-{
-    if (fontLoaded) return true;
-    if (fontPath.length() == 0) return false;
-    
-    // 吉里吉里のパス解決を使用
-    ttstr resolved = TVPGetPlacedPath(fontPath);
-    if (resolved.length() == 0) {
-        resolved = fontPath; // そのまま使用
-    }
-    
-    // ローカルアクセス可能なパスを取得して読み込み
-    ttstr localname(TVPGetLocallyAccessibleName(resolved));
-    
-    IStream* stream = nullptr;
-    
-    if (localname.length()) {
-        // ローカルファイルとして読み込み
-        stream = TVPCreateIStream(localname, TJS_BS_READ);
-    }
-    
-    if (!stream) {
-        // ストリームから読み込む
-        stream = TVPCreateIStream(resolved, TJS_BS_READ);
-    }
-    
-    if (!stream) {
-        return false;
-    }
-    
-    // ファイルサイズ取得
-    STATSTG stat;
-    stream->Stat(&stat, STATFLAG_NONAME);
-    fontDataSize = (uint32_t)stat.cbSize.QuadPart;
-    
-    // データ読み込み
-    fontData = new uint8_t[fontDataSize];
-    ULONG bytesRead;
-    HRESULT hr = stream->Read(fontData, fontDataSize, &bytesRead);
-    stream->Release();
-    
-    if (FAILED(hr) || bytesRead != fontDataSize) {
-        delete[] fontData;
-        fontData = nullptr;
-        fontDataSize = 0;
-        return false;
-    }
-    
-    // TtfReader を初期化
-    ttfReader = new TtfReader();
-    ttfReader->data = fontData;
-    ttfReader->size = fontDataSize;
-    
-    if (!ttfReader->header()) {
-        delete ttfReader;
-        ttfReader = nullptr;
-        delete[] fontData;
-        fontData = nullptr;
-        fontDataSize = 0;
-        return false;
-    }
-    
-    fontLoaded = true;
-    return true;
-}
-
-void FontInfo::updateSizeParams() const
-{
-    if (!propertyModified)
-        return;
-
-    propertyModified = false;
-    
-    // フォントファイルを読み込み
-    if (!loadFontFile()) {
-        // デフォルト値を設定
-        ascent = emSize * 0.8f;
-        descent = emSize * 0.2f;
-        lineSpacing = emSize;
-        return;
-    }
-    
-    // TtfReader からメトリクスを取得
-    // unitsPerEm を使用してスケーリング
-    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
-    
-    ascent = ttfReader->metrics.hhea.ascent * scale;
-    descent = -ttfReader->metrics.hhea.descent * scale; // descent は通常負の値
-    lineSpacing = ttfReader->metrics.hhea.advance * scale;
-}
-
-REAL FontInfo::getAscent() const
-{
-    updateSizeParams();
-    return ascent;
-}
-
-REAL FontInfo::getDescent() const
-{
-    updateSizeParams();
-    return descent;
-}
-
-REAL FontInfo::getLineSpacing() const
-{
-    updateSizeParams();
-    return lineSpacing;
-}
-
-bool FontInfo::isFontLoaded() const
-{
-    return fontLoaded || loadFontFile();
-}
-
-TtfReader* FontInfo::getTtfReader() const
-{
-    if (!fontLoaded) {
-        loadFontFile();
-    }
-    return ttfReader;
-}
-
-bool FontInfo::getCharPath(tjs_char ch, REAL x, REAL y, ::Path& path, REAL* advance) const
-{
-    if (!loadFontFile() || !ttfReader) {
-        return false;
-    }
-    
-    // グリフメトリクスを取得
-    TtfGlyphMetrics tgm;
-    uint32_t glyphOffset = ttfReader->glyph((uint32_t)ch, &tgm);
-    
-    if (tgm.idx == INVALID_GLYPH) {
-        return false;
-    }
-    
-    // スケーリング係数
-    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
-    
-    // RenderPath を使用してグリフのパスを取得
-    RenderPath renderPath;
-    tvg::Point offset = {0.0f, 0.0f};
-    
-    if (glyphOffset != 0) {
-        TtfGlyph glyph;
-        glyph.idx = tgm.idx;
-        glyph.advance = tgm.advance;
-        glyph.lsb = tgm.lsb;
-        glyph.y = tgm.y;
-        glyph.w = tgm.w;
-        glyph.h = tgm.h;
-        
-        ttfReader->convert(renderPath, glyph, glyphOffset, offset, 1);
-    }
-    
-    // RenderPath から Path へ変換（スケーリングとオフセット適用）
-    size_t ptIdx = 0;
-    for (uint32_t i = 0; i < renderPath.cmds.count; i++) {
-        switch (renderPath.cmds[i]) {
-            case tvg::PathCommand::MoveTo: {
-                REAL px = x + renderPath.pts[ptIdx].x * scale;
-                REAL py = y - renderPath.pts[ptIdx].y * scale; // Y軸反転
-                path.moveTo(px, py);
-                ptIdx++;
-                break;
-            }
-            case tvg::PathCommand::LineTo: {
-                REAL px = x + renderPath.pts[ptIdx].x * scale;
-                REAL py = y - renderPath.pts[ptIdx].y * scale;
-                path.lineTo(px, py);
-                ptIdx++;
-                break;
-            }
-            case tvg::PathCommand::CubicTo: {
-                REAL cx1 = x + renderPath.pts[ptIdx].x * scale;
-                REAL cy1 = y - renderPath.pts[ptIdx].y * scale;
-                REAL cx2 = x + renderPath.pts[ptIdx + 1].x * scale;
-                REAL cy2 = y - renderPath.pts[ptIdx + 1].y * scale;
-                REAL px = x + renderPath.pts[ptIdx + 2].x * scale;
-                REAL py = y - renderPath.pts[ptIdx + 2].y * scale;
-                path.cubicTo(cx1, cy1, cx2, cy2, px, py);
-                ptIdx += 3;
-                break;
-            }
-            case tvg::PathCommand::Close: {
-                path.closeFigure();
-                break;
-            }
-        }
-    }
-    
-    // 進行幅を返す
-    if (advance) {
-        *advance = tgm.advance * scale;
-    }
-    
-    return true;
-}
-
-bool FontInfo::getTextPath(const tjs_char* text, REAL x, REAL y, ::Path& path) const
-{
-    if (!text || !loadFontFile() || !ttfReader) {
-        return false;
-    }
-    
-    REAL cursorX = x;
-    uint32_t prevGlyphIdx = INVALID_GLYPH;
-    REAL scale = emSize / (REAL)ttfReader->metrics.unitsPerEm;
-    
-    while (*text) {
-        tjs_char ch = *text++;
-        
-        // カーニング適用
-        if (prevGlyphIdx != INVALID_GLYPH) {
-            TtfGlyphMetrics curGm;
-            ttfReader->glyph((uint32_t)ch, &curGm);
-            if (curGm.idx != INVALID_GLYPH) {
-                tvg::Point kerning = {0, 0};
-                ttfReader->kerning(prevGlyphIdx, curGm.idx, kerning);
-                cursorX += kerning.x * scale;
-            }
-        }
-        
-        REAL advance = 0;
-        if (getCharPath(ch, cursorX, y, path, &advance)) {
-            cursorX += advance;
-            
-            // 現在のグリフインデックスを保存
-            TtfGlyphMetrics tgm;
-            ttfReader->glyph((uint32_t)ch, &tgm);
-            prevGlyphIdx = tgm.idx;
-        } else {
-            prevGlyphIdx = INVALID_GLYPH;
-        }
-    }
-    
-    return true;
 }
 
 // --------------------------------------------------------
@@ -585,6 +273,45 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
     }
     
     drawInfos.push_back(info);
+}
+
+// --------------------------------------------------------
+// FontInfo クラス
+// --------------------------------------------------------
+
+FontInfo::FontInfo()
+    : fontSize(12.0f), italic(0), letterSpacing(1.0f), lineSpacing(1.0f)
+{
+}
+
+FontInfo::FontInfo(const tjs_char *family, REAL size)
+    : fontSize(size), italic(0), letterSpacing(1.0f), lineSpacing(1.0f)
+{
+    if (family) {
+        fontFamily = family;
+    }
+}
+
+FontInfo::FontInfo(const FontInfo &orig)
+    : fontFamily(orig.fontFamily),
+      fontSize(orig.fontSize),
+      italic(orig.italic),
+      letterSpacing(orig.letterSpacing),
+      lineSpacing(orig.lineSpacing)
+{
+}
+
+FontInfo::~FontInfo()
+{
+}
+
+void FontInfo::setFontFamily(const tjs_char *name)
+{
+    if (name) {
+        fontFamily = name;
+    } else {
+        fontFamily = L"";
+    }
 }
 
 // --------------------------------------------------------
@@ -1520,73 +1247,337 @@ RectF LayerExDraw::drawRectangles(const Appearance *app, tTJSVariant rects)
     return drawShapeWithAppearance(app, shape);
 }
 
-RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
+// --------------------------------------------------------
+// フォント管理
+// --------------------------------------------------------
+
+// UTF-16 を UTF-8 に変換するヘルパー関数
+static std::string wcharToUtf8(const tjs_char* wstr)
 {
-    // TtfReader を使ってテキストのパスを取得して描画
-    if (!canvas || !font || !text) return RectF();
+    if (!wstr) return "";
     
-    // フォントからテキストパスを取得
-    ::Path textPath;
-    if (!font->getTextPath(text, x, y, textPath)) {
-        return RectF();
+    std::string result;
+    while (*wstr) {
+        uint32_t ch = *wstr++;
+        
+        // サロゲートペアの処理
+        if (ch >= 0xD800 && ch <= 0xDBFF && *wstr >= 0xDC00 && *wstr <= 0xDFFF) {
+            uint32_t high = ch;
+            uint32_t low = *wstr++;
+            ch = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
+        }
+        
+        if (ch < 0x80) {
+            result += (char)ch;
+        } else if (ch < 0x800) {
+            result += (char)(0xC0 | (ch >> 6));
+            result += (char)(0x80 | (ch & 0x3F));
+        } else if (ch < 0x10000) {
+            result += (char)(0xE0 | (ch >> 12));
+            result += (char)(0x80 | ((ch >> 6) & 0x3F));
+            result += (char)(0x80 | (ch & 0x3F));
+        } else {
+            result += (char)(0xF0 | (ch >> 18));
+            result += (char)(0x80 | ((ch >> 12) & 0x3F));
+            result += (char)(0x80 | ((ch >> 6) & 0x3F));
+            result += (char)(0x80 | (ch & 0x3F));
+        }
     }
-    
-    // パスを描画
-    return drawPath(app, &textPath);
+    return result;
 }
 
-RectF LayerExDraw::measureString(const FontInfo *font, const tjs_char *text)
+// フォントデータを保持するマップ（アンロード時に解放するため）
+static std::map<std::string, uint8_t*> loadedFontData;
+
+bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
 {
-    if (!font || !text) return RectF();
+    if (!path) return false;
     
-    // TtfReader を使って正確なサイズを計算
-    TtfReader* reader = font->getTtfReader();
-    if (!reader) {
-        // フォント読み込み失敗時はデフォルト計算
-        size_t len = wcslen(text);
-        REAL width = font->emSize * len * 0.6f;
-        REAL height = font->getLineSpacing();
-        return RectF(0, 0, width, height);
+    // 吉里吉里のパス解決を使用
+    ttstr resolved = TVPGetPlacedPath(ttstr(path));
+    if (resolved.length() == 0) {
+        resolved = path;
     }
     
-    REAL scale = font->emSize / (REAL)reader->metrics.unitsPerEm;
-    REAL cursorX = 0;
-    uint32_t prevGlyphIdx = INVALID_GLYPH;
+    // ストリームを開く
+    IStream* stream = TVPCreateIStream(resolved, TJS_BS_READ);    
+    if (!stream) {
+        return false;
+    }
     
-    const tjs_char* p = text;
-    while (*p) {
-        tjs_char ch = *p++;
-        
-        TtfGlyphMetrics tgm;
-        reader->glyph((uint32_t)ch, &tgm);
-        
-        if (tgm.idx != INVALID_GLYPH) {
-            // カーニング適用
-            if (prevGlyphIdx != INVALID_GLYPH) {
-                tvg::Point kerning = {0, 0};
-                reader->kerning(prevGlyphIdx, tgm.idx, kerning);
-                cursorX += kerning.x * scale;
-            }
-            
-            cursorX += tgm.advance * scale;
-            prevGlyphIdx = tgm.idx;
+    // ファイルサイズ取得
+    STATSTG stat;
+    stream->Stat(&stat, STATFLAG_NONAME);
+    uint32_t dataSize = (uint32_t)stat.cbSize.QuadPart;
+    
+    // データ読み込み
+    uint8_t* fontData = new uint8_t[dataSize];
+    ULONG bytesRead;
+    HRESULT hr = stream->Read(fontData, dataSize, &bytesRead);
+    stream->Release();
+    
+    if (FAILED(hr) || bytesRead != dataSize) {
+        delete[] fontData;
+        return false;
+    }
+    
+    // 登録名を決定
+    std::string fontName;
+    if (name && *name) {
+        fontName = wcharToUtf8(name);
+    } else {
+        // パスからファイル名を抽出して使用
+        fontName = wcharToUtf8(path);
+        size_t lastSlash = fontName.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            fontName = fontName.substr(lastSlash + 1);
+        }
+        // 拡張子を除去
+        size_t lastDot = fontName.find_last_of('.');
+        if (lastDot != std::string::npos) {
+            fontName = fontName.substr(0, lastDot);
         }
     }
     
-    return RectF(0, 0, cursorX, font->getLineSpacing());
+    // ThorVG にフォントを登録（コピーあり）
+    tvg::Result result = tvg::Text::load(fontName.c_str(), (const char*)fontData, dataSize, "ttf", true);
+    
+    if (result == tvg::Result::Success) {
+        // 既存のデータがあれば解放
+        auto it = loadedFontData.find(fontName);
+        if (it != loadedFontData.end()) {
+            delete[] it->second;
+        }
+        loadedFontData[fontName] = fontData;
+        return true;
+    }
+    delete[] fontData;
+    return false;
 }
 
-RectF LayerExDraw::measureStringInternal(const FontInfo *font, const tjs_char *text)
+bool GdiPlus::unloadFont(const tjs_char *name)
 {
-    if (!font || !text) return RectF();
+    if (!name) return false;
     
-    // 実際のグリフバウンディングボックスを計算
-    ::Path textPath;
-    if (!font->getTextPath(text, 0, 0, textPath)) {
-        return measureString(font, text);
+    std::string fontName = wcharToUtf8(name);
+    
+    // ThorVGからアンロード（データをnullptrでloadするとアンロードされる）
+    tvg::Result result = tvg::Text::load(fontName.c_str(), nullptr, 0, "ttf", false);
+    
+    // 保持しているデータを解放
+    auto it = loadedFontData.find(fontName);
+    if (it != loadedFontData.end()) {
+        delete[] it->second;
+        loadedFontData.erase(it);
     }
     
-    return textPath.getBounds();
+    return result == tvg::Result::Success;
+}
+
+// --------------------------------------------------------
+// 文字列描画
+// --------------------------------------------------------
+
+RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
+{
+    if (!canvas || !font || !text || !app) return RectF();
+    
+    std::string fontName = wcharToUtf8(font->fontFamily.c_str());
+    std::string textUtf8 = wcharToUtf8(text);
+    
+    RectF totalBounds;
+    bool first = true;
+    
+    // Appearance の各描画情報に対して Text オブジェクトを生成して描画
+    for (size_t i = 0; i < app->drawInfos.size(); i++) {
+        const Appearance::DrawInfo& info = app->drawInfos[i];
+        
+        // Text オブジェクトを生成
+        tvg::Text* textObj = tvg::Text::gen();
+        if (!textObj) continue;
+        
+        // フォントとサイズを設定
+        textObj->font(fontName.c_str());
+        textObj->size(font->fontSize);
+        
+        // テキストを設定
+        textObj->text(textUtf8.c_str());
+        
+        // テキストパラメータを設定
+        if (font->italic > 0) {
+            textObj->italic(font->italic);
+        }
+        textObj->spacing(font->letterSpacing, font->lineSpacing);
+        
+        // ストロークまたはフィルを設定
+        if (info.type == 0) {
+            // ストローク
+            textObj->outline(info.strokeWidth, info.strokeR, info.strokeG, info.strokeB);
+            textObj->fill(0, 0, 0); // 塗りつぶしなし
+        } else {
+            // フィル
+            if (info.useLinearGradient || info.useRadialGradient) {
+                // グラデーションフィル
+                tvg::Fill* grad = nullptr;
+                if (info.useLinearGradient) {
+                    tvg::LinearGradient* lg = tvg::LinearGradient::gen();
+                    lg->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
+                    lg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    grad = lg;
+                } else {
+                    tvg::RadialGradient* rg = tvg::RadialGradient::gen();
+                    rg->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
+                    rg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    grad = rg;
+                }
+                textObj->fill(grad);
+            } else {
+                textObj->fill(info.fillR, info.fillG, info.fillB);
+            }
+        }
+        
+        // トランスフォームを適用
+        Matrix transform;
+        transform.Translate(x + info.ox, y + info.oy);
+        transform.Multiply(&calcTransform, MatrixOrderPrepend);
+
+        tvg::Matrix tm;
+        tm.e11 = transform.m.e11;
+        tm.e12 = transform.m.e12;
+        tm.e13 = transform.m.e13;
+        tm.e21 = transform.m.e21;
+        tm.e22 = transform.m.e22;
+        tm.e23 = transform.m.e23;
+        tm.e31 = 0;
+        tm.e32 = 0;
+        tm.e33 = 1;
+        textObj->transform(tm);
+        
+        // キャンバスに追加
+        canvas->add(textObj);
+        
+        // バウンディングボックスを計算
+        float bx, by, bw, bh;
+        if (textObj->bounds(&bx, &by, &bw, &bh) == tvg::Result::Success) {
+            RectF bounds(bx + info.ox, by + info.oy, bw, bh);
+            if (first) {
+                totalBounds = bounds;
+                first = false;
+            } else {
+                RectF::Union(totalBounds, totalBounds, bounds);
+            }
+        }
+    }
+    
+    // 描画を実行
+    canvas->draw();
+    canvas->sync();
+    
+    updateRect(totalBounds);
+    return totalBounds;
+}
+
+RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, REAL x, REAL y, REAL w, REAL h, REAL alignX, REAL alignY, int wrap, const tjs_char *text)
+{
+    if (!canvas || !font || !text || !app) return RectF();
+    
+    std::string fontName = wcharToUtf8(font->fontFamily.c_str());
+    std::string textUtf8 = wcharToUtf8(text);
+    
+    RectF totalBounds;
+    bool first = true;
+    
+    // Appearance の各描画情報に対して Text オブジェクトを生成して描画
+    for (size_t i = 0; i < app->drawInfos.size(); i++) {
+        const Appearance::DrawInfo& info = app->drawInfos[i];
+        
+        // Text オブジェクトを生成
+        tvg::Text* textObj = tvg::Text::gen();
+        if (!textObj) continue;
+        
+        // フォントとサイズを設定
+        textObj->font(fontName.c_str());
+        textObj->size(font->fontSize);
+        
+        // テキストを設定
+        textObj->text(textUtf8.c_str());
+        
+        // 矩形領域用のレイアウトを設定
+        textObj->layout(w, h);
+        textObj->align(alignX, alignY);
+        if (wrap != 0) {
+            textObj->wrap((tvg::TextWrap)wrap);
+        }
+        if (font->italic > 0) {
+            textObj->italic(font->italic);
+        }
+        textObj->spacing(font->letterSpacing, font->lineSpacing);
+        
+        // ストロークまたはフィルを設定
+        if (info.type == 0) {
+            // ストローク
+            textObj->outline(info.strokeWidth, info.strokeR, info.strokeG, info.strokeB);
+            textObj->fill(0, 0, 0);
+        } else {
+            // フィル
+            if (info.useLinearGradient || info.useRadialGradient) {
+                tvg::Fill* grad = nullptr;
+                if (info.useLinearGradient) {
+                    tvg::LinearGradient* lg = tvg::LinearGradient::gen();
+                    lg->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
+                    lg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    grad = lg;
+                } else {
+                    tvg::RadialGradient* rg = tvg::RadialGradient::gen();
+                    rg->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
+                    rg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    grad = rg;
+                }
+                textObj->fill(grad);
+            } else {
+                textObj->fill(info.fillR, info.fillG, info.fillB);
+            }
+        }
+        
+        // トランスフォームを適用
+        Matrix transform;
+        transform.Translate(x + info.ox, y + info.oy);
+        transform.Multiply(&calcTransform, MatrixOrderPrepend);
+
+        tvg::Matrix tm;
+        tm.e11 = transform.m.e11;
+        tm.e12 = transform.m.e12;
+        tm.e13 = transform.m.e13;
+        tm.e21 = transform.m.e21;
+        tm.e22 = transform.m.e22;
+        tm.e23 = transform.m.e23;
+        tm.e31 = 0;
+        tm.e32 = 0;
+        tm.e33 = 1;
+        textObj->transform(tm);
+        
+        // キャンバスに追加
+        canvas->add(textObj);
+        
+        // バウンディングボックスを計算
+        float bx, by, bw, bh;
+        if (textObj->bounds(&bx, &by, &bw, &bh) == tvg::Result::Success) {
+            RectF bounds(bx + info.ox, by + info.oy, bw, bh);
+            if (first) {
+                totalBounds = bounds;
+                first = false;
+            } else {
+                RectF::Union(totalBounds, totalBounds, bounds);
+            }
+        }
+    }
+    
+    // 描画を実行
+    canvas->draw();
+    canvas->sync();
+    
+    updateRect(totalBounds);
+    return totalBounds;
 }
 
 // --------------------------------------------------------
@@ -1614,28 +1605,6 @@ RectF LayerExDraw::measureStringInternal(const FontInfo *font, const tjs_char *t
         tvg::Paint::rel(picture);
         picture = nullptr;
     }
-}
-
-// UTF-16 から UTF-8 への変換ヘルパー
-static std::string wcharToUtf8(const tjs_char* wstr)
-{
-    if (!wstr) return "";
-    
-    std::string utf8;
-    while (*wstr) {
-        tjs_char ch = *wstr++;
-        if (ch < 0x80) {
-            utf8 += (char)ch;
-        } else if (ch < 0x800) {
-            utf8 += (char)(0xC0 | (ch >> 6));
-            utf8 += (char)(0x80 | (ch & 0x3F));
-        } else {
-            utf8 += (char)(0xE0 | (ch >> 12));
-            utf8 += (char)(0x80 | ((ch >> 6) & 0x3F));
-            utf8 += (char)(0x80 | (ch & 0x3F));
-        }
-    }
-    return utf8;
 }
 
 bool ::Image::load(const char* filename)

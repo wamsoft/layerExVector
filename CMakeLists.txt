@@ -49,9 +49,3 @@ krkrz_plugin(layerExVG
     LIBRARIES
         thorvg
 )
-
-# thorvg の フォントオブジェクトを直接参照するため細工
-target_include_directories(layerExVG PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/thorvg/src/common
-    ${CMAKE_CURRENT_SOURCE_DIR}/thorvg/src/renderer
-)

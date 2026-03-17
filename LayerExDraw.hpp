@@ -67,6 +67,9 @@ public:
 class GdiPlus {
 public:
     GdiPlus(){}
+    // フォント管理関数（グローバル）
+    static bool loadFont(const tjs_char *path, const tjs_char *name);
+    static bool unloadFont(const tjs_char *name);
 };
 
 // Forward declarations
@@ -320,95 +323,48 @@ public:
     const tvg::Matrix& getTvgMatrix() const { return m; }
 };
 
-// 前方宣言 (thorvg 内部構造体)
-struct TtfReader;
-
 // 前方宣言
 class Path;
 
 /**
- * フォント情報（ThorVG TtfReader ベース）
- * フォントファイルを直接指定して使用します
+ * フォント情報（thorvg::Text 用）
  */
 class FontInfo {
     friend class LayerExDraw;
-    friend class Path;
 
 protected:
-    ttstr fontPath;          // フォントファイルパス
-    REAL emSize;             // フォントサイズ
-    mutable bool propertyModified;
-    mutable REAL ascent;
-    mutable REAL descent;
-    mutable REAL lineSpacing;
-    
-    // TtfReader 関連
-    mutable TtfReader* ttfReader;
-    mutable uint8_t* fontData;
-    mutable uint32_t fontDataSize;
-    mutable bool fontLoaded;
-
-    void clear();
-    void updateSizeParams() const;
-    bool loadFontFile() const;
+    ttstr fontFamily;           // フォントファミリー名
+    REAL fontSize;              // フォントサイズ
+    REAL italic;                // イタリック傾斜 (0=なし, 0.18=標準)
+    REAL letterSpacing;         // 文字間隔スケール (1.0=標準)
+    REAL lineSpacing;           // 行間隔スケール (1.0=標準)
 
 public:
     FontInfo();
     
     /**
      * コンストラクタ
-     * @param fontPath フォントファイルパス（TTF/OTFファイル）
-     * @param emSize フォントサイズ
+     * @param fontFamily フォントファミリー名（loadFontで登録した名前）
+     * @param fontSize フォントサイズ
      */
-    FontInfo(const tjs_char *fontPath, REAL emSize);
+    FontInfo(const tjs_char *fontFamily, REAL fontSize);
     FontInfo(const FontInfo &orig);
     virtual ~FontInfo();
 
-    /**
-     * フォントファイルパスを設定
-     * @param fontPath TTF/OTFファイルへのパス
-     */
-    void setFontPath(const tjs_char *fontPath);
-    const tjs_char *getFontPath() { return fontPath.c_str(); }
+    void setFontFamily(const tjs_char *name);
+    const tjs_char *getFontFamily() { return fontFamily.c_str(); }
     
-    void setEmSize(REAL emSize) { this->emSize = emSize; propertyModified = true; }
-    REAL getEmSize() { return emSize; }
-
-    REAL getAscent() const;
-    REAL getDescent() const;
-    REAL getLineSpacing() const;
+    void setFontSize(REAL size) { this->fontSize = size; }
+    REAL getFontSize() { return fontSize; }
     
-    /**
-     * 文字列のパスを取得
-     * @param text テキスト
-     * @param x 開始X座標
-     * @param y 開始Y座標（ベースライン）
-     * @param path パスデータを格納するPathオブジェクト
-     * @return 成功した場合 true
-     */
-    bool getTextPath(const tjs_char* text, REAL x, REAL y, Path& path) const;
+    void setItalic(REAL shear) { this->italic = shear; }
+    REAL getItalic() { return italic; }
     
-    /**
-     * 単一文字のパスを取得
-     * @param ch 文字コード
-     * @param x X座標
-     * @param y Y座標（ベースライン）
-     * @param path パスデータを格納するPathオブジェクト
-     * @param advance 次の文字までの進行距離を返すポインタ（NULLの場合は返さない）
-     * @return 成功した場合 true
-     */
-    bool getCharPath(tjs_char ch, REAL x, REAL y, Path& path, REAL* advance = nullptr) const;
+    void setLetterSpacing(REAL spacing) { this->letterSpacing = spacing; }
+    REAL getLetterSpacing() { return letterSpacing; }
     
-    /**
-     * フォントファイルが正常に読み込まれているか
-     * @return フォントが読み込まれている場合 true
-     */
-    bool isFontLoaded() const;
-    
-    /**
-     * TtfReaderへのアクセス（内部使用）
-     */
-    TtfReader* getTtfReader() const;
+    void setLineSpacing(REAL spacing) { this->lineSpacing = spacing; }
+    REAL getLineSpacing() { return lineSpacing; }
 };
 
 /**
@@ -795,9 +751,13 @@ public:
 	 */
 	RectF drawRectangles(const Appearance *app, tTJSVariant rects);
 
+	// ------------------------------------------------------------------
+	// 文字列描画
+	// ------------------------------------------------------------------
+
 	/**
 	 * 文字列の描画
-	 * @param font フォント
+	 * @param font フォント情報
 	 * @param app アピアランス
 	 * @param x 描画位置X
 	 * @param y 描画位置Y
@@ -807,22 +767,20 @@ public:
 	RectF drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text);
 
 	/**
-	 * 文字列の描画更新領域情報の取得
-	 * @param font フォント
+	 * 矩形領域内への文字列の描画
+	 * @param font フォント情報
+	 * @param app アピアランス
+	 * @param x 矩形左端
+	 * @param y 矩形上端
+	 * @param w 矩形幅
+	 * @param h 矩形高さ
+	 * @param alignX 水平アラインメント (0=左, 0.5=中央, 1=右)
+	 * @param alignY 垂直アラインメント (0=上, 0.5=中央, 1=下)
+	 * @param wrap ワードラップモード (0=None, 1=Char, 2=Word, 3=MixedWrap, 4=Ellipsis)
 	 * @param text 描画テキスト
-	 * @return 更新領域情報の辞書 left, top, width, height
+	 * @return 更新領域情報
 	 */
-	RectF measureString(const FontInfo *font, const tjs_char *text);
-
-	/**
-	 * 文字列にぴったりと接っする矩形の取得
-	 * @param font フォント
-	 * @param text 描画テキスト
-	 * @return 領域情報の辞書 left, top, width, height
-	 */
-	RectF measureStringInternal(const FontInfo *font, const tjs_char *text);
-
-
+	RectF drawStringArea(const FontInfo *font, const Appearance *app, REAL x, REAL y, REAL w, REAL h, REAL alignX, REAL alignY, int wrap, const tjs_char *text);
 
 	// -----------------------------------------------------------------------------
 	

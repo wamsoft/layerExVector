@@ -29,30 +29,45 @@ class GdiPlus {
 	const MatrixOrderAppend = 1;
 
 	/**
+	 * フォントファイルをロード (static メソッド)
+	 * @param path フォントファイルパス（TTFファイル・OTF未対応）
+	 * @param name 登録名（省略時はパスから自動生成）
+	 * @return 成功した場合 true
+	 * @description
+	 * 使用例:
+	 *   GdiPlus.loadFont("fonts/myfont.ttf", "MyFont");
+	 */
+	static function loadFont(path, name);
+
+	/**
+	 * フォントをアンロード (static メソッド)
+	 * @param name 登録名
+	 * @return 成功した場合 true
+	 */
+	static function unloadFont(name);
+
+	/**
 	 * フォント情報
-	 * TTF/OTFフォントファイルを直接指定して使用します
+	 * loadFont() で登録したフォントを使用してテキストを描画するための設定を保持します
 	 */
 	class Font {
 		/**
 		 * コンストラクタ
-		 * @param fontPath フォントファイルへのパス（TTF/OTFファイル）
-		 * @param emSize フォントのサイズ
+		 * @param fontFamily フォントファミリー名（loadFont()で登録した名前）
+		 * @param fontSize フォントのサイズ
 		 */
-		function Font(fontPath, emSize);
+		function Font(fontFamily, fontSize);
 		
-		// フォントファイルパス
-		property fontPath;
+		// フォントファミリー名（loadFont()で登録した名前）
+		property fontFamily;
 		// フォントのサイズ
-		property emSize;
-
-		// ascent (読み出し専用)
-		property ascent;
-		// descent (読み出し専用)
-		property descent;
-		// 行間の長さ (読み出し専用)
+		property fontSize;
+		// イタリック傾斜 (0=なし, 0.18=標準)
+		property italic;
+		// 文字間隔スケール (1.0=標準, 値が大きいほど広い)
+		property letterSpacing;
+		// 行間隔スケール (1.0=標準, 値が大きいほど広い)
 		property lineSpacing;
-		// フォントが正常に読み込まれているか (読み出し専用)
-		property isLoaded;
 	};
 
 	/**
@@ -581,20 +596,20 @@ class Layer {
 	function drawString(font, app, x, y, text);
 
 	/**
-	 * 文字列の描画領域情報の取得
-	 * @param font フォント
+	 * 矩形領域内への文字列の描画
+	 * @param font フォント GdiPlus.Font でフォントを指定します
+	 * @param app アピアランス GdiPlus.Appearance で描画スタイルを指定します
+	 * @param x 矩形左端
+	 * @param y 矩形上端
+	 * @param w 矩形幅
+	 * @param h 矩形高さ
+	 * @param alignX 水平アラインメント (0=左, 0.5=中央, 1=右)
+	 * @param alignY 垂直アラインメント (0=上, 0.5=中央, 1=下)
+	 * @param wrap ワードラップモード (0=None, 1=Char, 2=Word, 3=MixedWrap, 4=Ellipsis)
 	 * @param text 描画テキスト
-	 * @return 描画領域情報(RectF)
+	 * @return 更新領域情報(RectF)
 	 */
-	function measureString(font, text);
-
-	/**
-	 * 文字列の描画領域情報の取得。measureString()で取得した領域に対して、マージンを除いて実際に文字列が存在する領域の矩形を返します。
-	 * @param font フォント
-	 * @param text 描画テキスト
-	 * @return 描画領域情報(RectF)
-	 */
-	function measureStringInternal(font, text);
+	function drawStringArea(font, app, x, y, w, h, alignX, alignY, wrap, text);
 
 	// -------------------------------------------------------------
 

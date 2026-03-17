@@ -353,16 +353,6 @@ NCB_REGISTER_SUBCLASS(MatrixWrapper)
 // 自前記述クラス登録
 // ------------------------------------------------------
 
-NCB_REGISTER_SUBCLASS(FontInfo) {
-	NCB_CONSTRUCTOR((const tjs_char *, REAL));
-	NCB_PROPERTY(fontPath, getFontPath, setFontPath);
-	NCB_PROPERTY(emSize, getEmSize, setEmSize);
-	NCB_PROPERTY_RO(ascent, getAscent);
-	NCB_PROPERTY_RO(descent, getDescent);
-	NCB_PROPERTY_RO(lineSpacing, getLineSpacing);
-	NCB_PROPERTY_RO(isLoaded, isFontLoaded);
-};
-
 static int32_t Appearance_addBrush(tTJSVariant *r, tjs_int n, tTJSVariant **p, Appearance* self)
 {
 	if (n < 1) return TJS_E_BADPARAMCOUNT;
@@ -391,6 +381,15 @@ NCB_REGISTER_SUBCLASS(Appearance) {
 	NCB_METHOD(clear);
 	RawCallback(TJS_W("addBrush"), Appearance_addBrush, 0);
 	RawCallback(TJS_W("addPen"), Appearance_addPen, 0);
+};
+
+NCB_REGISTER_SUBCLASS(FontInfo) {
+	NCB_CONSTRUCTOR((const tjs_char *, REAL));
+	NCB_PROPERTY(fontFamily, getFontFamily, setFontFamily);
+	NCB_PROPERTY(fontSize, getFontSize, setFontSize);
+	NCB_PROPERTY(italic, getItalic, setItalic);
+	NCB_PROPERTY(letterSpacing, getLetterSpacing, setLetterSpacing);
+	NCB_PROPERTY(lineSpacing, getLineSpacing, setLineSpacing);
 };
 
 NCB_REGISTER_SUBCLASS(Path) {
@@ -544,6 +543,10 @@ NCB_REGISTER_SUBCLASS(Image) {
 
 NCB_REGISTER_CLASS(GdiPlus)
 {
+	// フォント管理 (static メソッド)
+	NCB_METHOD(loadFont);
+	NCB_METHOD(unloadFont);
+
 	// BrushType
 	ENUM(BrushTypeSolidColor);
 	ENUM(BrushTypePathGradient);
@@ -571,7 +574,7 @@ NCB_REGISTER_CLASS(GdiPlus)
 	NCB_SUBCLASS(Matrix, MatrixWrapper);
 	NCB_SUBCLASS_NAME(Image);
 	
-	NCB_SUBCLASS(Font,FontInfo);
+	NCB_SUBCLASS(Font, FontInfo);
 	NCB_SUBCLASS(Appearance,Appearance);
 	NCB_SUBCLASS_NAME(Path);
 }
@@ -628,8 +631,7 @@ NCB_ATTACH_CLASS_WITH_HOOK(LayerExDraw, Layer) {
 	NCB_METHOD(drawRectangle);
 	NCB_METHOD(drawRectangles);
 	NCB_METHOD(drawString);
-	NCB_METHOD(measureString);
-	NCB_METHOD(measureStringInternal);
+	NCB_METHOD(drawStringArea);
 
 	NCB_METHOD(drawImage);
 	NCB_METHOD(drawImageRect);

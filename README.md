@@ -1,41 +1,43 @@
-Title: layerExVector plugin
-Author: わたなべごう
+# layerExVector plugin
 
-●これはなに？
+**Author:** わたなべごう
+
+## これはなに？
 
 Layer クラスにベクタ描画機能拡張を行うプラグインです。
-Windows専用の LayerExDraw プラグインのサブセットを実装したものになります。
+Windows専用の LayerExDraw プラグインのサブセットとして実装したものになります。
+※このためクラス名が GdiPlus のままになってます
 
-ベクタ描画には thorvg を使用しています（現状ではCPU描画のみの対応になります）
-https://www.thorvg.org/
+ベクタ描画には [ThorVG](https://www.thorvg.org/) を使用しています
 
- == 特徴 ==
+### 特徴
 
-・アウトラインベースの描画が可能
+- **アウトラインベースの描画が可能**
 
-　複数の PATH/FILL を組み合わせて様々なプリミティブを描画することができます
+  複数の PATH/FILL を組み合わせて様々なプリミティブを描画することができます
 
-・テキスト描画機構は従来の LayerExDraw のそれとは別物になります
+- **テキスト描画機構は従来の LayerExDraw のそれとは別物になります**
 
-  1. GdiPlus.loadFont() でフォントを登録
-  2. 描画時には登録名を指定して GdiPlus.Fontを作成。イタリックや変形などの指定がこれで可能
-  3. フォントを指定して drawString() で描画
+  1. `GdiPlus.loadFont()` でフォントを登録
+  2. 描画時には登録名を指定して `GdiPlus.Font` を作成。イタリックや変形などの指定がこれで可能
+  3. フォントを指定して `drawString()` で描画
 
-●使い方
+## 使い方
 
-manual.tjs 参照
+[manual.tjs](manual.tjs) 参照
 
-●拡張想定
+## 拡張想定
 
-・内部の Canvas を表にだして連続描画したうえでのSVG出力も対応させる
-・Canvas を使って OGL描画用のインターフェース対応
+- 内部の Canvas を表にだして連続描画したうえでのSVG出力も対応させる
+- Canvas を使って OGL描画用のインターフェース対応
 
-●ライセンス
+## ライセンス
 
 このプラグインのライセンスは吉里吉里本体に準拠してください。
 
-ThorVG のライセンスは以下です
+### ThorVG License
 
+```
 MIT License
 
 Copyright (c) 2020 - 2026 ThorVG Project
@@ -57,3 +59,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```

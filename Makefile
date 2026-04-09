@@ -34,7 +34,7 @@ else
 endif
 
 BUILD_TYPE?=Release
-CMAKEOPT?="-DUSE_SJIS=ON"
+CMAKEOPT?=""
 INSTALL_PREFIX?=install
 
 BUILD_PATH=$(shell cmake --preset $(PRESET) -N | grep BUILD_DIR | sed 's/.*BUILD_DIR="\(.*\)"/\1/')
@@ -57,33 +57,3 @@ clean:
 install:
 	cmake --install $(BUILD_PATH) --config $(BUILD_TYPE) --prefix $(INSTALL_PREFIX)
 
-# WIN版用ルール
-ifeq (windows,$(findstring windows,$(PRESET)))
-
-DATAPATH?=krkrz/data
-DATAPATH_ABS=$(shell $(FIXPATH) "$(DATAPATH)")
-
-ifeq (x86,$(findstring x86,$(PRESET)))
-PLUGINS_SRC_DIR=plugin
-PLUGINS_DST_DIR=$(BUILD_PATH)/$(BUILD_TYPE)/plugin
-EXEFILE=$(BUILD_PATH)/$(BUILD_TYPE)/krkrz.exe
-endif
-
-ifeq (x64,$(findstring x64,$(PRESET)))
-PLUGINS_SRC_DIR=plugin64
-PLUGINS_DST_DIR=$(BUILD_PATH)/$(BUILD_TYPE)/plugin64
-EXEFILE=$(BUILD_PATH)/krkrz/$(BUILD_TYPE)/krkrz64.exe
-endif
-
-PLUGINS = $(patsubst $(PLUGINS_SRC_DIR)/%.dll, $(PLUGINS_DST_DIR)/%.dll, $(wildcard $(PLUGINS_SRC_DIR)/*.dll))
-
-$(PLUGINS_DST_DIR)/%.dll : $(PLUGINS_SRC_DIR)/%.dll
-	@mkdir -p `dirname $@`
-	cp $< $@
-
-$(EXEFILE): build
-
-run: $(EXEFILE) $(PLUGINS)
-	$(EXEFILE) $(DATAPATH_ABS)
-
-endif

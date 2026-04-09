@@ -37,7 +37,7 @@ class GdiPlus {
 	 * 使用例:
 	 *   GdiPlus.loadFont("fonts/myfont.ttf", "MyFont");
 	 */
-	static function loadFont(path, name);
+	static function loadFont(path, name=void);
 
 	/**
 	 * フォントをアンロード (static メソッド)
@@ -114,7 +114,7 @@ class GdiPlus {
 		 *    color1: 開始色指定
 		 *    color2: 終了色指定
 		 */
-		function addBrush(colorOrBrush, ox, oy);
+		function addBrush(colorOrBrush, ox=0, oy=0);
 		
 		/**
 		 * ペンの追加
@@ -132,7 +132,7 @@ class GdiPlus {
 		 *  dashStyle: ダッシュパターン。数値の配列で指定
 		 *  dashOffset: ダッシュのオフセット指定。省略時は0
 		 */
-		function addPen(colorOrBrush, widthOrOption, ox, oy);
+		function addPen(colorOrBrush, widthOrOption=1.0, ox=0, oy=0);
 	};
 
 	/*
@@ -164,10 +164,10 @@ class GdiPlus {
 		function Equals(a);
 		function Inflate(a,b);
 		function InflatePoint(p);
-		function IntersectsWith();
+		function IntersectsWith(other);
 		function IsEmptyArea();
 		function Offset(a,b);
-		function Union();
+		function Union(result, a, b);
 	}
 
 	/**
@@ -194,16 +194,16 @@ class GdiPlus {
 		
 		function OffsetX();
 		function OffsetY();
-		function Equals();
-		function SetElements();
+		function Equals(matrix);
+		function SetElements(m11, m12, m21, m22, dx, dy);
 		function Invert();
 		function IsIdentity();
 		function IsInvertible();
-		function Multiply();
+		function Multiply(matrix, order=MatrixOrderPrepend);
 		function Reset();
-		function Rotate();
-		function Scale();
-		function Translate();
+		function Rotate(angle, order=MatrixOrderPrepend);
+		function Scale(sx, sy, order=MatrixOrderPrepend);
+		function Translate(dx, dy, order=MatrixOrderPrepend);
 	}
 	
 	/**

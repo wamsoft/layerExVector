@@ -41,7 +41,7 @@ set(TVG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 # Add ThorVG subdirectory
 add_subdirectory(thorvg)
 
-krkrz_plugin(layerExVG
+krkrz_plugin(layerExVector
     NCBIND
     SOURCES
         LayerExDraw.cpp

@@ -310,7 +310,7 @@ void FontInfo::setFontFamily(const tjs_char *name)
     if (name) {
         fontFamily = name;
     } else {
-        fontFamily = L"";
+        fontFamily = TJS_W("");
     }
 }
 
@@ -1300,23 +1300,20 @@ bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
     }
     
     // ストリームを開く
-    IStream* stream = TVPCreateIStream(resolved, TJS_BS_READ);    
+    iTJSBinaryStream* stream = TVPCreateStream(resolved, TJS_BS_READ);
     if (!stream) {
         return false;
     }
-    
+
     // ファイルサイズ取得
-    STATSTG stat;
-    stream->Stat(&stat, STATFLAG_NONAME);
-    uint32_t dataSize = (uint32_t)stat.cbSize.QuadPart;
-    
+    uint32_t dataSize = (uint32_t)stream->GetSize();
+
     // データ読み込み
     uint8_t* fontData = new uint8_t[dataSize];
-    ULONG bytesRead;
-    HRESULT hr = stream->Read(fontData, dataSize, &bytesRead);
-    stream->Release();
-    
-    if (FAILED(hr) || bytesRead != dataSize) {
+    tjs_uint bytesRead = stream->Read(fontData, dataSize);
+    stream->Destruct();
+
+    if (bytesRead != dataSize) {
         delete[] fontData;
         return false;
     }
@@ -1652,21 +1649,18 @@ bool ::Image::load(const tjs_char* filename)
     }
     
     // ストリームから読み込む
-    IStream* stream = TVPCreateIStream(resolved, TJS_BS_READ);
+    iTJSBinaryStream* stream = TVPCreateStream(resolved, TJS_BS_READ);
     if (!stream) return false;
-    
-    STATSTG stat;
-    stream->Stat(&stat, STATFLAG_NONAME);
-    uint32_t size = (uint32_t)stat.cbSize.QuadPart;
-    
-    std::vector <uint8_t> dataBuffer;    
-    
+
+    uint32_t size = (uint32_t)stream->GetSize();
+
+    std::vector <uint8_t> dataBuffer;
+
     dataBuffer.resize(size);
-    ULONG bytesRead;
-    HRESULT hr = stream->Read(dataBuffer.data(), size, &bytesRead);
-    stream->Release();
-    
-    if (FAILED(hr) || bytesRead != size) {
+    tjs_uint bytesRead = stream->Read(dataBuffer.data(), size);
+    stream->Destruct();
+
+    if (bytesRead != size) {
         dataBuffer.clear();
         return false;
     }

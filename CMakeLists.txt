@@ -8,6 +8,10 @@ add_compile_definitions("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CX
 
 include(../tp_stub/krkrz.cmake)
 
+find_package(libjpeg-turbo CONFIG)
+set(JPEG_INCLUDE_DIR ${libjpeg-turbo_INCLUDE_DIRS})
+set(JPEG_LIBRARIES $<IF:$<TARGET_EXISTS:libjpeg-turbo::turbojpeg>,libjpeg-turbo::turbojpeg,libjpeg-turbo::turbojpeg-static>)
+
 # ThorVG configuration - static library, SW engine only
 set(TVG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(TVG_THREADS ON CACHE BOOL "" FORCE)
@@ -39,7 +43,18 @@ set(TVG_BINDINGS_CAPI OFF CACHE BOOL "" FORCE)
 set(TVG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
 # Add ThorVG subdirectory
-add_subdirectory(thorvg)
+# - 静的にプラグインへリンクするだけで、thorvg-1.lib / thorvg.h / pkgconfig /
+#   thorvgTargets.cmake などをインストール先に出したくない。thorvg 側の
+#   CMakeLists には install 抑止スイッチが無いので、CMAKE_SKIP_INSTALL_RULES
+#   をサブディレクトリ用に立てて install() を全部スキップさせる。
+# - EXCLUDE_FROM_ALL でデフォルトビルド (ALL ターゲット) からも外す。
+#   layerExVector が thorvg を LIBRARIES で参照しているため、必要時に依存
+#   経由でビルドされる。
+set(_layerexvector_keep_skip_install_rules "${CMAKE_SKIP_INSTALL_RULES}")
+set(CMAKE_SKIP_INSTALL_RULES ON)
+add_subdirectory(thorvg EXCLUDE_FROM_ALL)
+set(CMAKE_SKIP_INSTALL_RULES "${_layerexvector_keep_skip_install_rules}")
+unset(_layerexvector_keep_skip_install_rules)
 
 krkrz_plugin(layerExVector
     NCBIND
@@ -48,4 +63,5 @@ krkrz_plugin(layerExVector
         main.cpp
     LIBRARIES
         thorvg
+        ${JPEG_LIBRARIES}
 )

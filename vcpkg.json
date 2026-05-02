@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "layerExVector",
+  "version": "0.1.0",
+  "description": "A vector graphics plugin for KRKRZ",
+  "dependencies": [
+    "zlib",
+    "libpng",
+    "libjpeg-turbo",
+    {
+      "name": "freetype",
+      "features": ["png", "zlib"]
+    },
+    "harfbuzz"
+  ]
+}

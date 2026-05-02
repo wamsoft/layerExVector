@@ -1,60 +1,39 @@
-cmake_minimum_required(VERSION 3.16)
-
-add_compile_options("$<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/utf-8>")
-add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/Zc:__cplusplus>")
-# ignore warnings
-add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:/wd4819>")
-add_compile_definitions("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C,CXX>>:_CRT_SECURE_NO_WARNINGS>")
-
-include(../tp_stub/krkrz.cmake)
-
-find_package(libjpeg-turbo CONFIG)
-set(JPEG_INCLUDE_DIR ${libjpeg-turbo_INCLUDE_DIRS})
-set(JPEG_LIBRARIES $<IF:$<TARGET_EXISTS:libjpeg-turbo::turbojpeg>,libjpeg-turbo::turbojpeg,libjpeg-turbo::turbojpeg-static>)
+set(TPSTUB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../tp_stub CACHE PATH "Path to tp_stub directory")
+include(${TPSTUB_DIR}/krkrz.cmake)
 
 # ThorVG configuration - static library, SW engine only
-set(TVG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(TVG_THREADS ON CACHE BOOL "" FORCE)
-set(TVG_PARTIAL ON CACHE BOOL "" FORCE)
-set(TVG_SIMD ON CACHE BOOL "" FORCE)
-set(TVG_LOG OFF CACHE BOOL "" FORCE)
-set(TVG_FILE_IO ON CACHE BOOL "" FORCE)
+option(TVG_BUILD_SHARED OFF)
+option(TVG_THREADS ON)
+option(TVG_PARTIAL ON)
+option(TVG_SIMD ON)
+option(TVG_LOG OFF)
+option(TVG_FILE_IO OFF)
 
 # Enable SW engine only
-set(TVG_ENGINE_SW ON CACHE BOOL "" FORCE)
-set(TVG_ENGINE_GL OFF CACHE BOOL "" FORCE)
-set(TVG_ENGINE_WG OFF CACHE BOOL "" FORCE)
+option(TVG_ENGINE_SW ON)
+option(TVG_ENGINE_GL OFF)
+option(TVG_ENGINE_WG OFF)
 
 # Loaders - enable what we need
-set(TVG_LOADER_SVG ON CACHE BOOL "" FORCE)
-set(TVG_LOADER_PNG ON CACHE BOOL "" FORCE)
-set(TVG_LOADER_JPG ON CACHE BOOL "" FORCE)
-set(TVG_LOADER_LOTTIE ON CACHE BOOL "" FORCE)
-set(TVG_LOADER_TTF ON CACHE BOOL "" FORCE)
-set(TVG_LOADER_WEBP OFF CACHE BOOL "" FORCE)
+option(TVG_LOADER_SVG ON)
+option(TVG_LOADER_PNG ON)
+option(TVG_LOADER_JPG ON)
+option(TVG_LOADER_LOTTIE ON)
+option(TVG_LOADER_TTF OFF)
+option(TVG_LOADER_FT ON)
+option(TVG_LOADER_WEBP OFF)
 
 # Disable savers and tools
-set(TVG_SAVER_GIF OFF CACHE BOOL "" FORCE)
-set(TVG_TOOL_SVG2PNG OFF CACHE BOOL "" FORCE)
-set(TVG_TOOL_LOTTIE2GIF OFF CACHE BOOL "" FORCE)
+option(TVG_SAVER_GIF OFF)
+option(TVG_TOOL_SVG2PNG OFF)
+option(TVG_TOOL_LOTTIE2GIF OFF)
 
 # Disable bindings and tests
-set(TVG_BINDINGS_CAPI OFF CACHE BOOL "" FORCE)
-set(TVG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+option(TVG_BINDINGS_CAPI OFF)
+option(TVG_BUILD_TESTS OFF)
 
 # Add ThorVG subdirectory
-# - 静的にプラグインへリンクするだけで、thorvg-1.lib / thorvg.h / pkgconfig /
-#   thorvgTargets.cmake などをインストール先に出したくない。thorvg 側の
-#   CMakeLists には install 抑止スイッチが無いので、CMAKE_SKIP_INSTALL_RULES
-#   をサブディレクトリ用に立てて install() を全部スキップさせる。
-# - EXCLUDE_FROM_ALL でデフォルトビルド (ALL ターゲット) からも外す。
-#   layerExVector が thorvg を LIBRARIES で参照しているため、必要時に依存
-#   経由でビルドされる。
-set(_layerexvector_keep_skip_install_rules "${CMAKE_SKIP_INSTALL_RULES}")
-set(CMAKE_SKIP_INSTALL_RULES ON)
 add_subdirectory(thorvg EXCLUDE_FROM_ALL)
-set(CMAKE_SKIP_INSTALL_RULES "${_layerexvector_keep_skip_install_rules}")
-unset(_layerexvector_keep_skip_install_rules)
 
 krkrz_plugin(layerExVector
     NCBIND
@@ -63,5 +42,4 @@ krkrz_plugin(layerExVector
         main.cpp
     LIBRARIES
         thorvg
-        ${JPEG_LIBRARIES}
 )

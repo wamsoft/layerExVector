@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "name": "layerExVector",
+  "name": "layerexvector",
   "version": "0.1.0",
   "description": "A vector graphics plugin for KRKRZ",
   "dependencies": [

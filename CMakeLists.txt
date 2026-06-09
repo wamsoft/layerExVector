@@ -10,39 +10,46 @@ endif()
 set(TPSTUB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../tp_stub CACHE PATH "Path to tp_stub directory")
 include(${TPSTUB_DIR}/krkrz.cmake)
 
-# ThorVG configuration - static library, SW engine only
-option(TVG_BUILD_SHARED OFF)
-option(TVG_THREADS ON)
-option(TVG_PARTIAL ON)
-option(TVG_SIMD ON)
-option(TVG_LOG OFF)
-option(TVG_FILE_IO OFF)
+# ThorVG: 親プロジェクトが既に thorvg ターゲットを提供していればそれを使う。
+# (krkrz_dev umbrella では他のサブが先に作る場合がある)。
+if(NOT TARGET thorvg)
+    # ThorVG configuration - static library, SW engine only
+    # option(NAME "description" DEFAULT) の引数順なので、2 つ引数で書くと
+    # 第 2 引数が description、デフォルトは OFF になる。明示的に
+    # set(... CACHE BOOL ... FORCE) で書いて事故防止。
+    set(TVG_BUILD_SHARED OFF CACHE BOOL "Build shared library" FORCE)
+    set(TVG_THREADS      ON  CACHE BOOL "Enable multi-threading task scheduler" FORCE)
+    set(TVG_PARTIAL      ON  CACHE BOOL "Enable Partial Rendering" FORCE)
+    set(TVG_SIMD         ON  CACHE BOOL "Enable CPU Vectorization (SIMD)" FORCE)
+    set(TVG_LOG          OFF CACHE BOOL "Enable log message" FORCE)
+    set(TVG_FILE_IO      OFF CACHE BOOL "Enable File IO calls" FORCE)
 
-# Enable SW engine only
-option(TVG_ENGINE_SW ON)
-option(TVG_ENGINE_GL OFF)
-option(TVG_ENGINE_WG OFF)
+    # Enable SW engine only
+    set(TVG_ENGINE_SW    ON  CACHE BOOL "Enable Software Rasterizer Engine" FORCE)
+    set(TVG_ENGINE_GL    OFF CACHE BOOL "Enable OpenGL Rasterizer Engine" FORCE)
+    set(TVG_ENGINE_WG    OFF CACHE BOOL "Enable WebGPU Rasterizer Engine" FORCE)
 
-# Loaders - enable what we need
-option(TVG_LOADER_SVG ON)
-option(TVG_LOADER_PNG ON)
-option(TVG_LOADER_JPG ON)
-option(TVG_LOADER_LOTTIE ON)
-option(TVG_LOADER_TTF OFF)
-option(TVG_LOADER_FT ON)
-option(TVG_LOADER_WEBP OFF)
+    # Loaders - enable what we need
+    set(TVG_LOADER_SVG    ON  CACHE BOOL "Enable SVG Loader" FORCE)
+    set(TVG_LOADER_PNG    ON  CACHE BOOL "Enable PNG Loader" FORCE)
+    set(TVG_LOADER_JPG    ON  CACHE BOOL "Enable JPG Loader" FORCE)
+    set(TVG_LOADER_LOTTIE ON  CACHE BOOL "Enable Lottie Loader" FORCE)
+    set(TVG_LOADER_TTF    OFF CACHE BOOL "Enable TTF Loader" FORCE)
+    set(TVG_LOADER_FT     ON  CACHE BOOL "Enable FT+HarfBuzz multilingual text loader" FORCE)
+    set(TVG_LOADER_WEBP   OFF CACHE BOOL "Enable WebP Loader" FORCE)
 
-# Disable savers and tools
-option(TVG_SAVER_GIF OFF)
-option(TVG_TOOL_SVG2PNG OFF)
-option(TVG_TOOL_LOTTIE2GIF OFF)
+    # Disable savers and tools
+    set(TVG_SAVER_GIF        OFF CACHE BOOL "Enable GIF Saver" FORCE)
+    set(TVG_TOOL_SVG2PNG     OFF CACHE BOOL "Build svg2png tool" FORCE)
+    set(TVG_TOOL_LOTTIE2GIF  OFF CACHE BOOL "Build lottie2gif tool" FORCE)
 
-# Disable bindings and tests
-option(TVG_BINDINGS_CAPI OFF)
-option(TVG_BUILD_TESTS OFF)
+    # Disable bindings and tests
+    set(TVG_BINDINGS_CAPI    OFF CACHE BOOL "Enable C API bindings" FORCE)
+    set(TVG_BUILD_TESTS      OFF CACHE BOOL "Build unit tests" FORCE)
 
-# Add ThorVG subdirectory
-add_subdirectory(thorvg EXCLUDE_FROM_ALL)
+    # Add ThorVG subdirectory
+    add_subdirectory(thorvg EXCLUDE_FROM_ALL)
+endif()
 
 krkrz_plugin(layerExVector
     NCBIND

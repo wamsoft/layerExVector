@@ -10,7 +10,6 @@
     {
       "name": "freetype",
       "features": ["png", "zlib"]
-    },
-    "harfbuzz"
+    }
   ]
 }

@@ -271,7 +271,7 @@ public:
 				adpobj->Release();			
 			} else {
 				delete clone;
-				dst = NULL;
+				dst = (iTJSDispatch2*)nullptr;
 			}
 		} else {
 			dst.Clear();
@@ -427,7 +427,7 @@ public:
 				adpobj->Release();
 			} else {
 				delete clone;
-				dst = NULL;
+				dst = (iTJSDispatch2*)nullptr;
 			}
 		} else {
 			dst.Clear();

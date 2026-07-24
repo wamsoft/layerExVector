@@ -81,6 +81,30 @@ void Appearance::clear()
     drawInfos.clear();
 }
 
+// tvg::Picture を w×h の ARGB8888 バッファへネイティブ解像度でラスタライズする。
+// (テクスチャブラシのソースタイルのピクセルを取り出すために使用)
+static bool rasterizePicture(tvg::Picture* src, uint32_t* out, int w, int h)
+{
+    if (!src || !out || w <= 0 || h <= 0) return false;
+    memset(out, 0, (size_t)w * h * sizeof(uint32_t));
+    tvg::SwCanvas* c = tvg::SwCanvas::gen();
+    if (!c) return false;
+    bool ok = false;
+    if (c->target(out, w, w, h, tvg::ColorSpace::ARGB8888) == tvg::Result::Success) {
+        tvg::Picture* dup = (tvg::Picture*)src->duplicate();
+        if (dup) {
+            dup->size((float)w, (float)h);
+            if (c->add(dup) == tvg::Result::Success) {
+                c->draw(true);
+                c->sync();
+                ok = true;
+            }
+        }
+    }
+    delete c; // 追加した Picture は Canvas 破棄時に解放される
+    return ok;
+}
+
 void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
 {
     DrawInfo info;
@@ -161,6 +185,47 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
             
             info.colorStops.push_back(stop1);
             info.colorStops.push_back(stop2);
+        } else if (type == BrushTypeTextureFill) {
+            // 画像タイル塗り (GDI+ TextureBrush 相当)。image はストレージパス文字列。
+            ttstr imgPath = propInfo.getStrValue(TJS_W("image"));
+            if (imgPath.length() > 0) {
+                ::Image img;
+                if (img.load(imgPath.c_str()) && img.getPicture()) {
+                    int tw = (int)(img.GetWidth()  + 0.5f);
+                    int th = (int)(img.GetHeight() + 0.5f);
+                    // dstRect でソース領域を指定 (省略時は画像全体)
+                    int sx = 0, sy = 0, sw = tw, sh = th;
+                    tTJSVariant rectVar;
+                    if (propInfo.checkVariant(TJS_W("dstRect"), rectVar)) {
+                        ncbPropAccessor ra(rectVar);
+                        if (ra.GetArrayCount() >= 4) {
+                            sx = (int)ra.getRealValue(0);
+                            sy = (int)ra.getRealValue(1);
+                            sw = (int)ra.getRealValue(2);
+                            sh = (int)ra.getRealValue(3);
+                        }
+                    }
+                    if (sw <= 0) sw = tw;
+                    if (sh <= 0) sh = th;
+                    // ソース画像をラスタライズして dstRect 範囲をタイル素材に切り出す
+                    if (tw > 0 && th > 0) {
+                        std::vector<uint32_t> full((size_t)tw * th, 0);
+                        if (rasterizePicture(img.getPicture(), full.data(), tw, th)) {
+                            info.texW = sw;
+                            info.texH = sh;
+                            info.texPixels.assign((size_t)sw * sh, 0);
+                            for (int y = 0; y < sh; y++) {
+                                for (int x = 0; x < sw; x++) {
+                                    int fx = sx + x, fy = sy + y;
+                                    if (fx >= 0 && fx < tw && fy >= 0 && fy < th)
+                                        info.texPixels[(size_t)y*sw + x] = full[(size_t)fy*tw + fx];
+                                }
+                            }
+                            info.useTextureFill = true;
+                        }
+                    }
+                }
+            }
         } else {
             // SolidColor
             ARGB color = (ARGB)propInfo.getIntValue(TJS_W("color"), 0xFFFFFFFF);
@@ -170,7 +235,7 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
             info.fillB = color & 0xFF;
         }
     }
-    
+
     drawInfos.push_back(info);
 }
 
@@ -1073,6 +1138,47 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
             
             // フィル色を透明に
             shape->fill(0, 0, 0, 0);
+        } else if (info.type == 1 && info.useTextureFill && !info.texPixels.empty()
+                   && info.texW > 0 && info.texH > 0) {
+            // テクスチャ(タイル)フィル: shape 範囲にタイル展開した Picture を
+            // 生成し、shape をクリッパとしてクリップ配置する。
+            float bx, by, bw, bh;
+            bool done = false;
+            if (shape->bounds(&bx, &by, &bw, &bh) == tvg::Result::Success && bw > 0 && bh > 0) {
+                int ox = (int)floorf(bx);
+                int oy = (int)floorf(by);
+                int W  = (int)ceilf(bx + bw) - ox;
+                int H  = (int)ceilf(by + bh) - oy;
+                if (W > 0 && H > 0) {
+                    int tw = info.texW, th = info.texH;
+                    std::vector<uint32_t> tiled((size_t)W * H);
+                    for (int y = 0; y < H; y++) {
+                        int sy = ((oy + y) % th + th) % th; // 全体(0,0)基準のタイル位相
+                        for (int x = 0; x < W; x++) {
+                            int sx = ((ox + x) % tw + tw) % tw;
+                            tiled[(size_t)y*W + x] = info.texPixels[(size_t)sy*tw + sx];
+                        }
+                    }
+                    tvg::Picture* pic = tvg::Picture::gen();
+                    if (pic && pic->load(tiled.data(), W, H, tvg::ColorSpace::ARGB8888, true) == tvg::Result::Success) {
+                        pic->translate((float)ox, (float)oy);
+                        shape->fill(255, 255, 255, 255); // クリッパのカバレッジ確保
+                        shape->strokeWidth(0);
+                        pic->clip(shape);       // shape をクリッパに (所有権は pic へ移る)
+                        canvas->add(pic);
+                        RectF bounds(bx + info.ox, by + info.oy, bw, bh);
+                        if (first) { totalBounds = bounds; first = false; }
+                        else RectF::Union(totalBounds, totalBounds, bounds);
+                        done = true;
+                    } else if (pic) {
+                        tvg::Paint::rel(pic);
+                    }
+                }
+            }
+            if (done) continue;         // 通常の shape 追加をスキップ
+            // タイル失敗時は透明フィルで素通し
+            shape->fill(0, 0, 0, 0);
+            shape->strokeWidth(0);
         } else { // フィル
             if (info.useLinearGradient) {
                 tvg::LinearGradient* grad = tvg::LinearGradient::gen();

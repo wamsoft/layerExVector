@@ -25,6 +25,7 @@ typedef int BOOL;
 // ブラシタイプ
 enum BrushType {
     BrushTypeSolidColor     = 0,
+    BrushTypeTextureFill    = 2, // 画像タイル塗り (GDI+ 互換値)
     BrushTypePathGradient   = 3,
     BrushTypeLinearGradient = 4
 };
@@ -397,7 +398,12 @@ public:
         REAL gradX1, gradY1, gradX2, gradY2;
         REAL gradCx, gradCy, gradR;
         vector<tvg::Fill::ColorStop> colorStops;
-        
+
+        // テクスチャ(タイル)フィル情報 (GDI+ TextureBrush 相当)
+        bool useTextureFill;
+        vector<uint32_t> texPixels; // ソースタイル ARGB8888 (texW*texH)
+        int texW, texH;
+
         DrawInfo() : type(0), ox(0), oy(0), strokeWidth(1),
             strokeR(0), strokeG(0), strokeB(0), strokeA(255),
             strokeCap(tvg::StrokeCap::Square), strokeJoin(tvg::StrokeJoin::Bevel),
@@ -405,7 +411,8 @@ public:
             fillR(0), fillG(0), fillB(0), fillA(255),
             useLinearGradient(false), useRadialGradient(false),
             gradX1(0), gradY1(0), gradX2(0), gradY2(0),
-            gradCx(0), gradCy(0), gradR(0) {}
+            gradCx(0), gradCy(0), gradR(0),
+            useTextureFill(false), texW(0), texH(0) {}
     };
     vector<DrawInfo> drawInfos;
 

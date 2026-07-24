@@ -521,6 +521,7 @@ NCB_REGISTER_CLASS(GdiPlus)
 
 	// BrushType
 	ENUM(BrushTypeSolidColor);
+	ENUM(BrushTypeTextureFill);
 	ENUM(BrushTypePathGradient);
 	ENUM(BrushTypeLinearGradient);
 

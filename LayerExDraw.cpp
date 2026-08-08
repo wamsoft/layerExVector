@@ -1125,7 +1125,11 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
         tm.e32 = 0;
         tm.e33 = 1;
         shape->transform(tm);
-        
+
+        // GDI+ の既定 FillMode は Alternate (even-odd)。ThorVG 既定の NonZero の
+        // ままだと複数サブパスの「穴」まで塗り潰されるので塗り時は even-odd に揃える
+        if (info.type != 0) shape->fillRule(tvg::FillRule::EvenOdd);
+
         if (info.type == 0) { // ストローク
             shape->strokeWidth(info.strokeWidth);
             shape->strokeFill(info.strokeR, info.strokeG, info.strokeB, info.strokeA);
@@ -1154,7 +1158,11 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
                     int tw = info.texW, th = info.texH;
                     std::vector<uint32_t> tiled((size_t)W * H);
                     for (int y = 0; y < H; y++) {
-                        int sy = ((oy + y) % th + th) % th; // 全体(0,0)基準のタイル位相
+                        // タイル位相は視覚(トップダウン)座標の(0,0)基準。flipped 時は
+                        // キャンバス行がボトムアップなので視覚行に直してから位相を取る
+                        int cy = oy + y;
+                        int vy = flipped ? (height - 1 - cy) : cy;
+                        int sy = (vy % th + th) % th;
                         for (int x = 0; x < W; x++) {
                             int sx = ((ox + x) % tw + tw) % tw;
                             tiled[(size_t)y*W + x] = info.texPixels[(size_t)sy*tw + sx];

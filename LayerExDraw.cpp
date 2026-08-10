@@ -1461,15 +1461,23 @@ bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
         }
     }
     
-    // ThorVG にフォントを登録（コピーあり）
-    tvg::Result result = tvg::Text::load(fontName.c_str(), (const char*)fontData, dataSize, "ttf", true);
-    
-    if (result == tvg::Result::Success) {
-        // 既存のデータがあれば解放
+    // 同名の既存登録があれば先に解除してから旧バイトを解放する
+    // (copy=false ではローダが旧バイトを借用参照しているため、解放前の解除が必須)
+    {
         auto it = loadedFontData.find(fontName);
         if (it != loadedFontData.end()) {
+            tvg::Text::load(fontName.c_str(), nullptr, 0, "ttf", false);
             delete[] it->second;
+            loadedFontData.erase(it);
         }
+    }
+
+    // ThorVG にフォントを登録。バイトは loadedFontData がアンロードまで保持する
+    // ので copy=false で渡す (gw/ft どちらのローダも借用参照で開ける。従来の
+    // copy=true はローダ側にもう 1 コピー作っていた)
+    tvg::Result result = tvg::Text::load(fontName.c_str(), (const char*)fontData, dataSize, "ttf", false);
+
+    if (result == tvg::Result::Success) {
         loadedFontData[fontName] = fontData;
         return true;
     }

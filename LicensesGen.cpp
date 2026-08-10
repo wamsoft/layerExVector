@@ -3,6 +3,10 @@
 
 #include "tp_stub.h"
 
+/* License API 非対応バージョンの tp_stub / 本体ヘッダと組み合わせた
+   ビルドでは登録をまるごとスキップして空関数になる (互換ガード)。 */
+#ifdef TVP_HAS_LICENSE_API
+
 /* ThorVG (1077 -> 640 bytes) */
 static const unsigned char lic_00[] = {
 	120,218,93,82,75,143,218,48,16,190,231,87,140,56,237,74,233,118,181,135,30,122,51,193,
@@ -110,3 +114,9 @@ void RegisterLayerExVectorLicenses()
 	TVPRegisterLicense(TJS_W("JerryScript"), TJS_W("plugin:layerExVector"), lic_01, 727, 1283);
 	TVPRegisterLicense(TJS_W("RapidJSON"), TJS_W("plugin:layerExVector"), lic_02, 771, 1273);
 }
+
+#else /* !TVP_HAS_LICENSE_API */
+
+void RegisterLayerExVectorLicenses() {}
+
+#endif /* TVP_HAS_LICENSE_API */

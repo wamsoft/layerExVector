@@ -64,6 +64,7 @@ krkrz_plugin(layerExVector
     NCBIND
     SOURCES
         LayerExDraw.cpp
+        LicensesGen.cpp
         main.cpp
     LIBRARIES
         thorvg

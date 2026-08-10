@@ -1,0 +1,8 @@
+{
+  "comment": "layerExVector が同梱する第三者コンポーネントのライセンス。texts を更新したら core の licenses/gen_licenses_c.py --mode plugin で LicensesGen.cpp を再生成する。",
+  "entries": [
+    { "name": "ThorVG",      "group": "plugin:layerExVector", "file": "../thorvg/LICENSE" },
+    { "name": "JerryScript", "group": "plugin:layerExVector", "file": "../thorvg/src/loaders/lottie/jerryscript/jerry-core/LICENSE" },
+    { "name": "RapidJSON",   "group": "plugin:layerExVector", "file": "../thorvg/src/loaders/lottie/rapidjson/LICENSE" }
+  ]
+}

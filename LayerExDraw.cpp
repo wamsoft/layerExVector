@@ -16,8 +16,13 @@
 #include "thorvg_gw_bridge.h"
 #endif
 
+extern void RegisterLayerExVectorLicenses();   // LicensesGen.cpp (生成物)
+
 void initThorvg()
 {
+    // 同梱コンポーネント (ThorVG 等) のライセンス文を本体へ登録する
+    // (System.getLicenseList / getLicenseText で参照可能になる)
+    RegisterLayerExVectorLicenses();
     // 利用するスレッド数を指定 (0 ならメインスレッドのみ、1 以上ならその数だけワーカースレッドを起動)
     tvg::Initializer::init(4);
 #ifdef LAYEREXVECTOR_TVG_GW

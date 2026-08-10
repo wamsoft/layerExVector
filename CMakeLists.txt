@@ -35,7 +35,16 @@ if(NOT TARGET thorvg)
     set(TVG_LOADER_JPG    ON  CACHE BOOL "Enable JPG Loader" FORCE)
     set(TVG_LOADER_LOTTIE ON  CACHE BOOL "Enable Lottie Loader" FORCE)
     set(TVG_LOADER_TTF    OFF CACHE BOOL "Enable TTF Loader" FORCE)
-    set(TVG_LOADER_FT     ON  CACHE BOOL "Enable FT+HarfBuzz multilingual text loader" FORCE)
+    # ホスト (krkrz) が glyphware を持つ場合はブリッジローダ (GW) を使い、
+    # thorvg 内蔵の FreeType+HarfBuzz スタックを外す (ブリッジは本体側が注入)。
+    # 単体ビルド等 glyphware 無し環境は従来どおり FT ローダ。
+    if(KRKRZ_USE_GLYPHWARE)
+        set(TVG_LOADER_FT OFF CACHE BOOL "Disable in-tree FT+HarfBuzz text loader" FORCE)
+        set(TVG_LOADER_GW ON  CACHE BOOL "Enable host-bridge (glyphware) text loader" FORCE)
+    else()
+        set(TVG_LOADER_FT ON  CACHE BOOL "Enable FT+HarfBuzz multilingual text loader" FORCE)
+        set(TVG_LOADER_GW OFF CACHE BOOL "Disable host-bridge text loader" FORCE)
+    endif()
     set(TVG_LOADER_WEBP   OFF CACHE BOOL "Enable WebP Loader" FORCE)
 
     # Disable savers and tools
@@ -59,3 +68,8 @@ krkrz_plugin(layerExVector
     LIBRARIES
         thorvg
 )
+
+# gw テキストローダ使用時はブリッジ注入コード (initThorvg) を有効化
+if(TVG_LOADER_GW)
+    target_compile_definitions(layerExVector PRIVATE LAYEREXVECTOR_TVG_GW=1)
+endif()

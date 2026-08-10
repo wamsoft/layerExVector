@@ -12,10 +12,20 @@
 #endif
 
 // thorvg 初期化
+#ifdef LAYEREXVECTOR_TVG_GW
+#include "thorvg_gw_bridge.h"
+#endif
+
 void initThorvg()
 {
     // 利用するスレッド数を指定 (0 ならメインスレッドのみ、1 以上ならその数だけワーカースレッドを起動)
     tvg::Initializer::init(4);
+#ifdef LAYEREXVECTOR_TVG_GW
+    // gw テキストローダ使用時: 本体の glyphware ブリッジをこの DLL 内の
+    // thorvg コピーへ注入する (thorvg を静的リンクしているため、exe 側で
+    // 登録されたブリッジは DLL 側のグローバルには反映されない)
+    tvgGwSetBridge(static_cast<const TvgGwBridge*>(TVPGetFontTvgBridge()));
+#endif
 }
 
 // thorvg 終了

@@ -541,6 +541,13 @@ NCB_REGISTER_CLASS(GdiPlus)
 	ENUM(MatrixOrderPrepend);
 	ENUM(MatrixOrderAppend);
 
+	// SmoothingMode (None/HighSpeed は描画後のアルファ二値化で AA を打ち消す)
+	ENUM(SmoothingModeDefault);
+	ENUM(SmoothingModeHighSpeed);
+	ENUM(SmoothingModeHighQuality);
+	ENUM(SmoothingModeNone);
+	ENUM(SmoothingModeAntiAlias);
+
 // classes
 	NCB_SUBCLASS_NAME(PointF);
 	NCB_SUBCLASS_NAME(RectF);

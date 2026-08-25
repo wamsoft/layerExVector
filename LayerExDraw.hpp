@@ -52,6 +52,17 @@ enum MatrixOrder {
     MatrixOrderAppend  = 1
 };
 
+// 描画スムージング (GDI+ 互換値)。 ThorVG は AA を無効化できないため、
+// None / HighSpeed 指定時は描画後にカバレッジ 50% しきい値でアルファを
+// 二値化し、 非 AA (ジャギー) 描画と同等の見た目にする (applySmoothingPost)
+enum SmoothingMode {
+    SmoothingModeDefault     = 0,
+    SmoothingModeHighSpeed   = 1,
+    SmoothingModeHighQuality = 2,
+    SmoothingModeNone        = 3,
+    SmoothingModeAntiAlias   = 4
+};
+
 // --------------------------------------------------------
 // 例外・前方宣言
 // --------------------------------------------------------
@@ -530,8 +541,10 @@ protected:
     Matrix calcTransform;
 
 protected:
-    // 描画スムージング指定（互換性のため残す）
+    // 描画スムージング指定。 SmoothingModeNone / HighSpeed のときは
+    // updateRect 前に applySmoothingPost で AA を打ち消す
     int smoothingMode;
+    void applySmoothingPost(const RectF &rect);
 
 public:
     int getSmoothingMode() {

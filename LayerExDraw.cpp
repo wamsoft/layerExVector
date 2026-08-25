@@ -997,8 +997,60 @@ void LayerExDraw::reset()
     updateTransform();
 }
 
+// ThorVG は AA を無効化できないため、 SmoothingModeNone / HighSpeed の
+// ときは描画結果の部分アルファ画素をカバレッジ 50% のしきい値で二値化し、
+// 非 AA (ジャギー) 描画と同等の見た目にする。 対象は今回描いた矩形のみ
+// (線分ごとの全面走査を避ける)。 バッファは canvas target と同じ
+// premultiplied ARGB / 行マッピング (reset 参照)。
+void LayerExDraw::applySmoothingPost(const RectF &rect)
+{
+    if (smoothingMode != SmoothingModeNone &&
+        smoothingMode != SmoothingModeHighSpeed) return;
+    if (!buffer || width <= 0 || height <= 0) return;
+
+    unsigned char *cbase;
+    tjs_int stridePx;
+    if (pitch < 0) {
+        cbase = buffer + (size_t)(height - 1) * pitch;
+        stridePx = (-pitch) / (tjs_int)sizeof(tjs_uint32);
+    } else {
+        cbase = buffer;
+        stridePx = width;
+    }
+
+    int x0 = (int)rect.X - 1, y0 = (int)rect.Y - 1;
+    int x1 = (int)(rect.X + rect.Width) + 2;
+    int y1 = (int)(rect.Y + rect.Height) + 2;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > width)  x1 = width;
+    if (y1 > height) y1 = height;
+
+    for (int y = y0; y < y1; y++) {
+        tjs_uint32 *row = (tjs_uint32*)cbase + (size_t)y * stridePx;
+        for (int x = x0; x < x1; x++) {
+            tjs_uint32 px = row[x];
+            tjs_uint32 a = px >> 24;
+            if (a == 0 || a == 255) continue;
+            if (a < 128) {
+                row[x] = 0;
+            } else {
+                // premultiplied -> straight に戻して不透明化
+                tjs_uint32 r = (((px >> 16) & 0xFF) * 255 + a / 2) / a;
+                tjs_uint32 g = (((px >>  8) & 0xFF) * 255 + a / 2) / a;
+                tjs_uint32 b = (( px        & 0xFF) * 255 + a / 2) / a;
+                if (r > 255) r = 255;
+                if (g > 255) g = 255;
+                if (b > 255) b = 255;
+                row[x] = 0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+}
+
 void LayerExDraw::updateRect(RectF &rect)
 {
+    applySmoothingPost(rect);
     if (updateWhenDraw) {
         // 上下反転時は更新矩形の Y 座標を反転
         REAL y = flipped ? (REAL)(height - rect.Y - rect.Height) : rect.Y;

@@ -127,7 +127,7 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
     info.type = 1; // フィル
     info.ox = ox;
     info.oy = oy;
-    
+
     if (colorOrBrush.Type() != tvtObject) {
         // ARGB色
         ARGB color = (ARGB)(tjs_int)colorOrBrush;
@@ -139,10 +139,10 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
         // ブラシ情報（辞書）
         ncbPropAccessor propInfo(colorOrBrush);
         int type = propInfo.getIntValue(TJS_W("type"), BrushTypeSolidColor);
-        
+
         if (type == BrushTypeLinearGradient) {
             info.useLinearGradient = true;
-            
+
             tTJSVariant var;
             if (propInfo.checkVariant(TJS_W("point1"), var)) {
                 PointF p1 = getPoint(var);
@@ -154,28 +154,28 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
                 info.gradX2 = p2.X;
                 info.gradY2 = p2.Y;
             }
-            
+
             ARGB color1 = (ARGB)propInfo.getIntValue(TJS_W("color1"), 0);
             ARGB color2 = (ARGB)propInfo.getIntValue(TJS_W("color2"), 0);
-            
+
             tvg::Fill::ColorStop stop1, stop2;
             stop1.offset = 0.0f;
             stop1.a = (color1 >> 24) & 0xFF;
             stop1.r = (color1 >> 16) & 0xFF;
             stop1.g = (color1 >> 8) & 0xFF;
             stop1.b = color1 & 0xFF;
-            
+
             stop2.offset = 1.0f;
             stop2.a = (color2 >> 24) & 0xFF;
             stop2.r = (color2 >> 16) & 0xFF;
             stop2.g = (color2 >> 8) & 0xFF;
             stop2.b = color2 & 0xFF;
-            
+
             info.colorStops.push_back(stop1);
             info.colorStops.push_back(stop2);
         } else if (type == BrushTypePathGradient) { // PathGradient (RadialGradient として近似)
             info.useRadialGradient = true;
-            
+
             tTJSVariant var;
             if (propInfo.checkVariant(TJS_W("centerPoint"), var)) {
                 PointF cp = getPoint(var);
@@ -183,22 +183,22 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
                 info.gradCy = cp.Y;
             }
             info.gradR = (REAL)propInfo.getRealValue(TJS_W("radius"), 100);
-            
+
             ARGB centerColor = (ARGB)propInfo.getIntValue(TJS_W("centerColor"), 0xFFFFFFFF);
-            
+
             tvg::Fill::ColorStop stop1, stop2;
             stop1.offset = 0.0f;
             stop1.a = (centerColor >> 24) & 0xFF;
             stop1.r = (centerColor >> 16) & 0xFF;
             stop1.g = (centerColor >> 8) & 0xFF;
             stop1.b = centerColor & 0xFF;
-            
+
             stop2.offset = 1.0f;
             stop2.a = 0;
             stop2.r = 0;
             stop2.g = 0;
             stop2.b = 0;
-            
+
             info.colorStops.push_back(stop1);
             info.colorStops.push_back(stop2);
         } else if (type == BrushTypeTextureFill) {
@@ -261,7 +261,7 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
     info.type = 0; // ストローク
     info.ox = ox;
     info.oy = oy;
-    
+
     // 色設定
     if (colorOrBrush.Type() != tvtObject) {
         ARGB color = (ARGB)(tjs_int)colorOrBrush;
@@ -277,18 +277,18 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
         info.strokeG = (color >> 8) & 0xFF;
         info.strokeB = color & 0xFF;
     }
-    
+
     // 幅とオプション設定
     if (widthOrOption.Type() != tvtObject) {
         info.strokeWidth = (REAL)(tjs_real)widthOrOption;
     } else {
         ncbPropAccessor propInfo(widthOrOption);
-        
+
         tTJSVariant var;
         if (propInfo.checkVariant(TJS_W("width"), var)) {
             info.strokeWidth = (REAL)(tjs_real)var;
         }
-        
+
         // LineCap
         if (propInfo.checkVariant(TJS_W("startCap"), var) || propInfo.checkVariant(TJS_W("endCap"), var)) {
             int cap = (int)(tjs_int)var;
@@ -311,7 +311,7 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
                 break;
             }
         }
-        
+
         // LineJoin
         if (propInfo.checkVariant(TJS_W("lineJoin"), var)) {
             int join = (int)(tjs_int)var;
@@ -334,25 +334,25 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
                 break;
             }
         }
-        
+
         // MiterLimit
         if (propInfo.checkVariant(TJS_W("miterLimit"), var)) {
             info.miterLimit = (REAL)(tjs_real)var;
         }
-        
+
         // DashStyle
         if (propInfo.checkVariant(TJS_W("dashStyle"), var)) {
             if (IsArray(var)) {
                 getReals(var, info.dashPattern);
             }
         }
-        
+
         // DashOffset
         if (propInfo.checkVariant(TJS_W("dashOffset"), var)) {
             info.dashOffset = (REAL)(tjs_real)var;
         }
     }
-    
+
     drawInfos.push_back(info);
 }
 
@@ -440,14 +440,14 @@ void Path::addArcPoints(REAL cx, REAL cy, REAL rx, REAL ry, REAL startAngle, REA
     // 楕円弧をベジェ曲線で近似
     const int numSegments = (int)(fabs(sweepAngle) / 90.0f) + 1;
     const REAL segmentAngle = sweepAngle / numSegments;
-    
+
     REAL angle = startAngle * (REAL)M_PI / 180.0f;
     const REAL deltaAngle = segmentAngle * (REAL)M_PI / 180.0f;
-    
+
     // 開始点
     REAL startX = cx + rx * cosf(angle);
     REAL startY = cy + ry * sinf(angle);
-    
+
     if (!figureStarted) {
         currentPos.x = startX;
         currentPos.y = startY;
@@ -457,23 +457,23 @@ void Path::addArcPoints(REAL cx, REAL cy, REAL rx, REAL ry, REAL startAngle, REA
         tvg::Point p = {startX, startY};
         points.push_back(p);
     }
-    
+
     for (int i = 0; i < numSegments; i++) {
         REAL endAngle = angle + deltaAngle;
-        
+
         // ベジェ制御点の計算
         REAL kappa = 4.0f / 3.0f * tanf(deltaAngle / 4.0f);
-        
+
         REAL x1 = cx + rx * cosf(angle);
         REAL y1 = cy + ry * sinf(angle);
         REAL x4 = cx + rx * cosf(endAngle);
         REAL y4 = cy + ry * sinf(endAngle);
-        
+
         REAL x2 = x1 - kappa * rx * sinf(angle);
         REAL y2 = y1 + kappa * ry * cosf(angle);
         REAL x3 = x4 + kappa * rx * sinf(endAngle);
         REAL y3 = y4 - kappa * ry * cosf(endAngle);
-        
+
         commands.push_back(tvg::PathCommand::CubicTo);
         tvg::Point cp1 = {x2, y2};
         tvg::Point cp2 = {x3, y3};
@@ -481,10 +481,10 @@ void Path::addArcPoints(REAL cx, REAL cy, REAL rx, REAL ry, REAL startAngle, REA
         points.push_back(cp1);
         points.push_back(cp2);
         points.push_back(ep);
-        
+
         angle = endAngle;
     }
-    
+
     currentPos.x = cx + rx * cosf(angle);
     currentPos.y = cy + ry * sinf(angle);
 }
@@ -495,7 +495,7 @@ void Path::drawArc(REAL x, REAL y, REAL width, REAL height, REAL startAngle, REA
     REAL cy = y + height / 2;
     REAL rx = width / 2;
     REAL ry = height / 2;
-    
+
     addArcPoints(cx, cy, rx, ry, startAngle, sweepAngle);
 }
 
@@ -504,7 +504,7 @@ void Path::drawBezier(REAL x1, REAL y1, REAL x2, REAL y2, REAL x3, REAL y3, REAL
     currentPos.x = x1;
     currentPos.y = y1;
     ensureFigureStarted();
-    
+
     commands.push_back(tvg::PathCommand::CubicTo);
     tvg::Point cp1 = {x2, y2};
     tvg::Point cp2 = {x3, y3};
@@ -512,7 +512,7 @@ void Path::drawBezier(REAL x1, REAL y1, REAL x2, REAL y2, REAL x3, REAL y3, REAL
     points.push_back(cp1);
     points.push_back(cp2);
     points.push_back(ep);
-    
+
     currentPos = ep;
 }
 
@@ -520,13 +520,13 @@ void Path::drawBeziers(tTJSVariant pts)
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if (ps.size() < 4) return;
-    
+
     currentPos.x = ps[0].X;
     currentPos.y = ps[0].Y;
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i + 2 < ps.size(); i += 3) {
         commands.push_back(tvg::PathCommand::CubicTo);
         tvg::Point cp1 = {ps[i].X, ps[i].Y};
@@ -542,27 +542,27 @@ void Path::drawBeziers(tTJSVariant pts)
 void Path::computeCardinalSpline(const vector<PointF>& pts, REAL tension, bool closed, vector<tvg::Point>& outPts)
 {
     if (pts.size() < 2) return;
-    
+
     // Cardinal spline をベジェ曲線に変換
     REAL t = (1.0f - tension) / 2.0f;
-    
+
     size_t n = pts.size();
     for (size_t i = 0; i < n - 1; i++) {
         PointF p0 = (i == 0) ? (closed ? pts[n-1] : pts[0]) : pts[i-1];
         PointF p1 = pts[i];
         PointF p2 = pts[i+1];
         PointF p3 = (i == n - 2) ? (closed ? pts[0] : pts[n-1]) : pts[i+2];
-        
+
         REAL cp1x = p1.X + t * (p2.X - p0.X) / 3.0f;
         REAL cp1y = p1.Y + t * (p2.Y - p0.Y) / 3.0f;
         REAL cp2x = p2.X - t * (p3.X - p1.X) / 3.0f;
         REAL cp2y = p2.Y - t * (p3.Y - p1.Y) / 3.0f;
-        
+
         if (i == 0) {
             tvg::Point sp = {p1.X, p1.Y};
             outPts.push_back(sp);
         }
-        
+
         tvg::Point c1 = {cp1x, cp1y};
         tvg::Point c2 = {cp2x, cp2y};
         tvg::Point ep = {p2.X, p2.Y};
@@ -570,19 +570,19 @@ void Path::computeCardinalSpline(const vector<PointF>& pts, REAL tension, bool c
         outPts.push_back(c2);
         outPts.push_back(ep);
     }
-    
+
     if (closed && n > 2) {
         // 閉じた曲線の最後のセグメント
         PointF p0 = pts[n-2];
         PointF p1 = pts[n-1];
         PointF p2 = pts[0];
         PointF p3 = pts[1];
-        
+
         REAL cp1x = p1.X + t * (p2.X - p0.X) / 3.0f;
         REAL cp1y = p1.Y + t * (p2.Y - p0.Y) / 3.0f;
         REAL cp2x = p2.X - t * (p3.X - p1.X) / 3.0f;
         REAL cp2y = p2.Y - t * (p3.Y - p1.Y) / 3.0f;
-        
+
         tvg::Point c1 = {cp1x, cp1y};
         tvg::Point c2 = {cp2x, cp2y};
         tvg::Point ep = {p2.X, p2.Y};
@@ -601,17 +601,17 @@ void Path::drawClosedCurve2(tTJSVariant pts, REAL tension)
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if (ps.size() < 3) return;
-    
+
     vector<tvg::Point> splinePts;
     computeCardinalSpline(ps, tension, true, splinePts);
-    
+
     if (splinePts.empty()) return;
-    
+
     currentPos = splinePts[0];
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i + 2 < splinePts.size(); i += 3) {
         commands.push_back(tvg::PathCommand::CubicTo);
         points.push_back(splinePts[i]);
@@ -619,7 +619,7 @@ void Path::drawClosedCurve2(tTJSVariant pts, REAL tension)
         points.push_back(splinePts[i+2]);
         currentPos = splinePts[i+2];
     }
-    
+
     closeFigure();
 }
 
@@ -632,17 +632,17 @@ void Path::drawCurve2(tTJSVariant pts, REAL tension)
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if (ps.size() < 2) return;
-    
+
     vector<tvg::Point> splinePts;
     computeCardinalSpline(ps, tension, false, splinePts);
-    
+
     if (splinePts.empty()) return;
-    
+
     currentPos = splinePts[0];
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i + 2 < splinePts.size(); i += 3) {
         commands.push_back(tvg::PathCommand::CubicTo);
         points.push_back(splinePts[i]);
@@ -656,19 +656,19 @@ void Path::drawCurve3(tTJSVariant pts, int offset, int numberOfSegments, REAL te
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if ((size_t)(offset + numberOfSegments + 1) > ps.size()) return;
-    
+
     vector<PointF> subPts(ps.begin() + offset, ps.begin() + offset + numberOfSegments + 1);
-    
+
     vector<tvg::Point> splinePts;
     computeCardinalSpline(subPts, tension, false, splinePts);
-    
+
     if (splinePts.empty()) return;
-    
+
     currentPos = splinePts[0];
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i + 2 < splinePts.size(); i += 3) {
         commands.push_back(tvg::PathCommand::CubicTo);
         points.push_back(splinePts[i]);
@@ -684,25 +684,25 @@ void Path::drawPie(REAL x, REAL y, REAL width, REAL height, REAL startAngle, REA
     REAL cy = y + height / 2;
     REAL rx = width / 2;
     REAL ry = height / 2;
-    
+
     // 中心から開始
     currentPos.x = cx;
     currentPos.y = cy;
     ensureFigureStarted();
-    
+
     // 円弧の開始点へ
     REAL startRad = startAngle * (REAL)M_PI / 180.0f;
     REAL startX = cx + rx * cosf(startRad);
     REAL startY = cy + ry * sinf(startRad);
-    
+
     commands.push_back(tvg::PathCommand::LineTo);
     tvg::Point sp = {startX, startY};
     points.push_back(sp);
     currentPos = sp;
-    
+
     // 円弧を描画
     addArcPoints(cx, cy, rx, ry, startAngle, sweepAngle);
-    
+
     // 中心に戻って閉じる
     closeFigure();
 }
@@ -713,11 +713,11 @@ void Path::drawEllipse(REAL x, REAL y, REAL width, REAL height)
     REAL cy = y + height / 2;
     REAL rx = width / 2;
     REAL ry = height / 2;
-    
+
     currentPos.x = cx + rx;
     currentPos.y = cy;
     ensureFigureStarted();
-    
+
     addArcPoints(cx, cy, rx, ry, 0, 360);
     closeFigure();
 }
@@ -727,7 +727,7 @@ void Path::drawLine(REAL x1, REAL y1, REAL x2, REAL y2)
     currentPos.x = x1;
     currentPos.y = y1;
     ensureFigureStarted();
-    
+
     commands.push_back(tvg::PathCommand::LineTo);
     tvg::Point ep = {x2, y2};
     points.push_back(ep);
@@ -738,13 +738,13 @@ void Path::drawLines(tTJSVariant pts)
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if (ps.size() < 2) return;
-    
+
     currentPos.x = ps[0].X;
     currentPos.y = ps[0].Y;
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i < ps.size(); i++) {
         commands.push_back(tvg::PathCommand::LineTo);
         tvg::Point p = {ps[i].X, ps[i].Y};
@@ -757,20 +757,20 @@ void Path::drawPolygon(tTJSVariant pts)
 {
     vector<PointF> ps;
     getPoints(pts, ps);
-    
+
     if (ps.size() < 3) return;
-    
+
     currentPos.x = ps[0].X;
     currentPos.y = ps[0].Y;
     ensureFigureStarted();
-    
+
     for (size_t i = 1; i < ps.size(); i++) {
         commands.push_back(tvg::PathCommand::LineTo);
         tvg::Point p = {ps[i].X, ps[i].Y};
         points.push_back(p);
         currentPos = p;
     }
-    
+
     closeFigure();
 }
 
@@ -779,18 +779,18 @@ void Path::drawRectangle(REAL x, REAL y, REAL width, REAL height)
     currentPos.x = x;
     currentPos.y = y;
     ensureFigureStarted();
-    
+
     tvg::Point p1 = {x + width, y};
     tvg::Point p2 = {x + width, y + height};
     tvg::Point p3 = {x, y + height};
-    
+
     commands.push_back(tvg::PathCommand::LineTo);
     points.push_back(p1);
     commands.push_back(tvg::PathCommand::LineTo);
     points.push_back(p2);
     commands.push_back(tvg::PathCommand::LineTo);
     points.push_back(p3);
-    
+
     closeFigure();
 }
 
@@ -798,7 +798,7 @@ void Path::drawRectangles(tTJSVariant rects)
 {
     vector<RectF> rs;
     getRects(rects, rs);
-    
+
     for (size_t i = 0; i < rs.size(); i++) {
         drawRectangle(rs[i].X, rs[i].Y, rs[i].Width, rs[i].Height);
         startFigure();
@@ -816,19 +816,19 @@ RectF Path::getBounds() const
     if (points.empty()) {
         return RectF(0, 0, 0, 0);
     }
-    
+
     REAL minX = points[0].x;
     REAL minY = points[0].y;
     REAL maxX = points[0].x;
     REAL maxY = points[0].y;
-    
+
     for (size_t i = 1; i < points.size(); i++) {
         if (points[i].x < minX) minX = points[i].x;
         if (points[i].y < minY) minY = points[i].y;
         if (points[i].x > maxX) maxX = points[i].x;
         if (points[i].y > maxY) maxY = points[i].y;
     }
-    
+
     return RectF(minX, minY, maxX - minX, maxY - minY);
 }
 
@@ -881,7 +881,7 @@ void Path::addPath(const Path& other, REAL offsetX, REAL offsetY)
     size_t ptIdx = 0;
     for (size_t i = 0; i < other.commands.size(); i++) {
         commands.push_back(other.commands[i]);
-        
+
         switch (other.commands[i]) {
             case tvg::PathCommand::MoveTo:
             case tvg::PathCommand::LineTo: {
@@ -939,41 +939,38 @@ LayerExDraw::~LayerExDraw()
 void LayerExDraw::reset()
 {
     layerExBase::reset();
-    
+
     // 変更されている場合は作り直し
     if (!(canvas &&
           width == _width &&
           height == _height &&
           pitch == _pitch &&
           buffer == _buffer)) {
-        
+
         if (canvas) {
             delete canvas;
             canvas = NULL;
         }
-        
+
         width = _width;
         height = _height;
         pitch = _pitch;
         buffer = _buffer;
-        flipped = (pitch < 0);
-        
+        // スクラッチは常にトップダウン。 レイヤの上下反転 (負 pitch) は
+        // flushToLayer の行アドレス計算 (buffer + y*pitch) が吸収するので、
+        // 描画側の反転補正は不要になった
+        flipped = false;
+
+        scratch.assign((size_t)width * height, 0);
         canvas = tvg::SwCanvas::gen();
         if (canvas) {
-            if (flipped) {
-                // pitch が負の場合、メモリが上下反転しているので順方向に補正
-                uint32_t absPitch = (uint32_t)(-pitch);
-                uint32_t stridePixels = absPitch / (uint32_t)sizeof(uint32_t);
-                uint8_t* canvasBuffer = buffer + (height - 1) * pitch;
-                canvas->target((uint32_t*)canvasBuffer, stridePixels, width, height, tvg::ColorSpace::ARGB8888);
-            } else {
-                canvas->target((uint32_t*)buffer, width, width, height, tvg::ColorSpace::ARGB8888);
-            }
+            canvas->target(scratch.data(), width, width, height,
+                           tvg::ColorSpace::ARGB8888);
         }
-        
+
         clipWidth = clipHeight = -1;
     }
-    
+
     // クリッピング領域変更の場合は設定し直し
     if (_clipLeft != clipLeft ||
         _clipTop != clipTop ||
@@ -983,7 +980,7 @@ void LayerExDraw::reset()
         clipTop = _clipTop;
         clipWidth = _clipWidth;
         clipHeight = _clipHeight;
-        
+
         if (canvas) {
             if (flipped) {
                 // 上下反転時は viewport の Y 座標も反転
@@ -997,60 +994,77 @@ void LayerExDraw::reset()
     updateTransform();
 }
 
-// ThorVG は AA を無効化できないため、 SmoothingModeNone / HighSpeed の
-// ときは描画結果の部分アルファ画素をカバレッジ 50% のしきい値で二値化し、
-// 非 AA (ジャギー) 描画と同等の見た目にする。 対象は今回描いた矩形のみ
-// (線分ごとの全面走査を避ける)。 バッファは canvas target と同じ
-// premultiplied ARGB / 行マッピング (reset 参照)。
-void LayerExDraw::applySmoothingPost(const RectF &rect)
+// スクラッチ (premultiplied ARGB、 トップダウン) の rect 部分をレイヤ
+// バッファ (straight ARGB、 krkrz 規約) へ α 合成する。 合成した範囲の
+// スクラッチはクリアし、 canvas の保持シェイプも捨てる (保持シーンの
+// 差分再描画で krkrz 側の下地が消えるのを防ぐため、 シーンは draw ごとに
+// 使い捨てる)。 SmoothingModeNone / HighSpeed のときは合成時にカバレッジ
+// 50% のしきい値で二値化し、 非 AA (ジャギー) 描画と同等の見た目にする。
+void LayerExDraw::flushToLayer(const RectF &rect)
 {
-    if (smoothingMode != SmoothingModeNone &&
-        smoothingMode != SmoothingModeHighSpeed) return;
-    if (!buffer || width <= 0 || height <= 0) return;
-
-    unsigned char *cbase;
-    tjs_int stridePx;
-    if (pitch < 0) {
-        cbase = buffer + (size_t)(height - 1) * pitch;
-        stridePx = (-pitch) / (tjs_int)sizeof(tjs_uint32);
-    } else {
-        cbase = buffer;
-        stridePx = width;
+    if (!buffer || width <= 0 || height <= 0 || scratch.empty()) {
+        if (canvas) canvas->remove();
+        return;
     }
-
-    int x0 = (int)rect.X - 1, y0 = (int)rect.Y - 1;
-    int x1 = (int)(rect.X + rect.Width) + 2;
-    int y1 = (int)(rect.Y + rect.Height) + 2;
+    int x0 = (int)rect.X - 2, y0 = (int)rect.Y - 2;
+    int x1 = (int)(rect.X + rect.Width) + 3;
+    int y1 = (int)(rect.Y + rect.Height) + 3;
     if (x0 < 0) x0 = 0;
     if (y0 < 0) y0 = 0;
     if (x1 > width)  x1 = width;
     if (y1 > height) y1 = height;
+    if (x0 >= x1 || y0 >= y1) {
+        if (canvas) canvas->remove();
+        return;
+    }
 
+    const bool binarize = (smoothingMode == SmoothingModeNone ||
+                           smoothingMode == SmoothingModeHighSpeed);
     for (int y = y0; y < y1; y++) {
-        tjs_uint32 *row = (tjs_uint32*)cbase + (size_t)y * stridePx;
+        uint32_t *srow = scratch.data() + (size_t)y * width;
+        uint32_t *drow = (uint32_t*)(buffer + (ptrdiff_t)y * pitch);
         for (int x = x0; x < x1; x++) {
-            tjs_uint32 px = row[x];
-            tjs_uint32 a = px >> 24;
-            if (a == 0 || a == 255) continue;
-            if (a < 128) {
-                row[x] = 0;
+            uint32_t s = srow[x];
+            uint32_t sa = s >> 24;
+            if (!sa) continue;
+            uint32_t sr = (s >> 16) & 0xFF, sg = (s >> 8) & 0xFF, sb = s & 0xFF;
+            if (sa < 255) {
+                // premultiplied -> straight
+                sr = (sr * 255 + sa / 2) / sa; if (sr > 255) sr = 255;
+                sg = (sg * 255 + sa / 2) / sa; if (sg > 255) sg = 255;
+                sb = (sb * 255 + sa / 2) / sa; if (sb > 255) sb = 255;
+            }
+            if (binarize) {
+                if (sa < 128) continue;
+                sa = 255;
+            }
+            if (sa == 255) {
+                drow[x] = 0xFF000000u | (sr << 16) | (sg << 8) | sb;
             } else {
-                // premultiplied -> straight に戻して不透明化
-                tjs_uint32 r = (((px >> 16) & 0xFF) * 255 + a / 2) / a;
-                tjs_uint32 g = (((px >>  8) & 0xFF) * 255 + a / 2) / a;
-                tjs_uint32 b = (( px        & 0xFF) * 255 + a / 2) / a;
-                if (r > 255) r = 255;
-                if (g > 255) g = 255;
-                if (b > 255) b = 255;
-                row[x] = 0xFF000000u | (r << 16) | (g << 8) | b;
+                uint32_t d = drow[x];
+                uint32_t da = d >> 24;
+                uint32_t dr = (d >> 16) & 0xFF, dg = (d >> 8) & 0xFF, db = d & 0xFF;
+                uint32_t oa = sa + da * (255 - sa) / 255;
+                uint32_t orr = 0, og = 0, ob = 0;
+                if (oa) {
+                    orr = (sr * sa + dr * da * (255 - sa) / 255) / oa;
+                    og  = (sg * sa + dg * da * (255 - sa) / 255) / oa;
+                    ob  = (sb * sa + db * da * (255 - sa) / 255) / oa;
+                    if (orr > 255) orr = 255;
+                    if (og  > 255) og  = 255;
+                    if (ob  > 255) ob  = 255;
+                }
+                drow[x] = (oa << 24) | (orr << 16) | (og << 8) | ob;
             }
         }
+        memset(srow + x0, 0, (size_t)(x1 - x0) * sizeof(uint32_t));
     }
+    if (canvas) canvas->remove();
 }
 
 void LayerExDraw::updateRect(RectF &rect)
 {
-    applySmoothingPost(rect);
+    flushToLayer(rect);
     if (updateWhenDraw) {
         // 上下反転時は更新矩形の Y 座標を反転
         REAL y = flipped ? (REAL)(height - rect.Y - rect.Height) : rect.Y;
@@ -1140,25 +1154,19 @@ void LayerExDraw::translateTransform(REAL dx, REAL dy)
 
 void LayerExDraw::clear(ARGB argb)
 {
-    if (!canvas) return;
-    
-    // キャンバスをクリア
-    canvas->remove();
-    
-    // 背景色で塗りつぶし
-    tvg::Shape* bg = tvg::Shape::gen();
-    bg->appendRect(0, 0, (float)width, (float)height);
-    
-    uint8_t a = (argb >> 24) & 0xFF;
-    uint8_t r = (argb >> 16) & 0xFF;
-    uint8_t g = (argb >> 8) & 0xFF;
-    uint8_t b = argb & 0xFF;
-    bg->fill(r, g, b, a);
-    
-    canvas->add(bg);
-    canvas->draw();
-    canvas->sync();
-    
+    if (canvas) canvas->remove();
+    if (!buffer || width <= 0 || height <= 0) return;
+
+    // レイヤバッファ (straight ARGB) を直接塗りつぶす。 スクラッチ合成方式
+    // では背景をシーンとして保持しないため、 ThorVG を介す必要がない
+    uint32_t col = (uint32_t)argb;
+    for (int y = 0; y < height; y++) {
+        uint32_t *drow = (uint32_t*)(buffer + (ptrdiff_t)y * pitch);
+        for (int x = 0; x < width; x++) drow[x] = col;
+    }
+    if (!scratch.empty())
+        memset(scratch.data(), 0, scratch.size() * sizeof(uint32_t));
+
     _pUpdate(0, NULL);
 }
 
@@ -1168,18 +1176,18 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
         tvg::Paint::rel(baseShape);
         return RectF();
     }
-    
+
     RectF totalBounds;
     bool first = true;
-    
+
     // 描画情報を使って次々描画
     for (size_t i = 0; i < app->drawInfos.size(); i++) {
         const Appearance::DrawInfo& info = app->drawInfos[i];
-        
+
         // シェイプを複製
         tvg::Shape* shape = (tvg::Shape*)baseShape->duplicate();
         if (!shape) continue;
-        
+
         // オフセットとトランスフォームを適用
         tvg::Matrix tm;
         tm.e11 = calcTransform.m.e11;
@@ -1203,11 +1211,11 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
             shape->strokeCap(info.strokeCap);
             shape->strokeJoin(info.strokeJoin);
             shape->strokeMiterlimit(info.miterLimit);
-            
+
             if (!info.dashPattern.empty()) {
                 shape->strokeDash(info.dashPattern.data(), (uint32_t)info.dashPattern.size(), info.dashOffset);
             }
-            
+
             // フィル色を透明に
             shape->fill(0, 0, 0, 0);
         } else if (info.type == 1 && info.useTextureFill && !info.texPixels.empty()
@@ -1269,13 +1277,13 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
             } else {
                 shape->fill(info.fillR, info.fillG, info.fillB, info.fillA);
             }
-            
+
             // ストロークなし
             shape->strokeWidth(0);
         }
-        
+
         canvas->add(shape);
-        
+
         // バウンディングボックスを計算
         // （簡易的にパスから計算）
         float bx, by, bw, bh;
@@ -1289,14 +1297,14 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
             }
         }
     }
-    
+
     // 描画を実行
     canvas->draw();
     canvas->sync();
-    
+
     // 元のシェイプを解放
     tvg::Paint::rel(baseShape);
-    
+
     updateRect(totalBounds);
     return totalBounds;
 }
@@ -1304,17 +1312,17 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
 RectF LayerExDraw::drawPath(const Appearance *app, const ::Path *path)
 {
     if (!path) return RectF();
-    
+
     tvg::Shape* shape = tvg::Shape::gen();
-    
+
     vector<tvg::PathCommand> cmds;
     vector<tvg::Point> pts;
     path->getPathData(cmds, pts);
-    
+
     if (!cmds.empty()) {
         shape->appendPath(cmds.data(), (uint32_t)cmds.size(), pts.data(), (uint32_t)pts.size());
     }
-    
+
     return drawShapeWithAppearance(app, shape);
 }
 
@@ -1420,12 +1428,12 @@ RectF LayerExDraw::drawRectangles(const Appearance *app, tTJSVariant rects)
 {
     vector<RectF> rs;
     getRects(rects, rs);
-    
+
     tvg::Shape* shape = tvg::Shape::gen();
     for (size_t i = 0; i < rs.size(); i++) {
         shape->appendRect(rs[i].X, rs[i].Y, rs[i].Width, rs[i].Height);
     }
-    
+
     return drawShapeWithAppearance(app, shape);
 }
 
@@ -1437,18 +1445,18 @@ RectF LayerExDraw::drawRectangles(const Appearance *app, tTJSVariant rects)
 static std::string wcharToUtf8(const tjs_char* wstr)
 {
     if (!wstr) return "";
-    
+
     std::string result;
     while (*wstr) {
         uint32_t ch = *wstr++;
-        
+
         // サロゲートペアの処理
         if (ch >= 0xD800 && ch <= 0xDBFF && *wstr >= 0xDC00 && *wstr <= 0xDFFF) {
             uint32_t high = ch;
             uint32_t low = *wstr++;
             ch = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
         }
-        
+
         if (ch < 0x80) {
             result += (char)ch;
         } else if (ch < 0x800) {
@@ -1474,13 +1482,13 @@ static std::map<std::string, uint8_t*> loadedFontData;
 bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
 {
     if (!path) return false;
-    
+
     // 吉里吉里のパス解決を使用
     ttstr resolved = TVPGetPlacedPath(ttstr(path));
     if (resolved.length() == 0) {
         resolved = path;
     }
-    
+
     // ストリームを開く
     iTJSBinaryStream* stream = TVPCreateStream(resolved, TJS_BS_READ);
     if (!stream) {
@@ -1499,7 +1507,7 @@ bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
         delete[] fontData;
         return false;
     }
-    
+
     // 登録名を決定
     std::string fontName;
     if (name && *name) {
@@ -1517,7 +1525,7 @@ bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
             fontName = fontName.substr(0, lastDot);
         }
     }
-    
+
     // 同名の既存登録があれば先に解除してから旧バイトを解放する
     // (copy=false ではローダが旧バイトを借用参照しているため、解放前の解除が必須)
     {
@@ -1545,19 +1553,19 @@ bool GdiPlus::loadFont(const tjs_char *path, const tjs_char *name)
 bool GdiPlus::unloadFont(const tjs_char *name)
 {
     if (!name) return false;
-    
+
     std::string fontName = wcharToUtf8(name);
-    
+
     // ThorVGからアンロード（データをnullptrでloadするとアンロードされる）
     tvg::Result result = tvg::Text::load(fontName.c_str(), nullptr, 0, "ttf", false);
-    
+
     // 保持しているデータを解放
     auto it = loadedFontData.find(fontName);
     if (it != loadedFontData.end()) {
         delete[] it->second;
         loadedFontData.erase(it);
     }
-    
+
     return result == tvg::Result::Success;
 }
 
@@ -1568,34 +1576,34 @@ bool GdiPlus::unloadFont(const tjs_char *name)
 RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL x, REAL y, const tjs_char *text)
 {
     if (!canvas || !font || !text || !app) return RectF();
-    
+
     std::string fontName = wcharToUtf8(font->fontFamily.c_str());
     std::string textUtf8 = wcharToUtf8(text);
-    
+
     RectF totalBounds;
     bool first = true;
-    
+
     // Appearance の各描画情報に対して Text オブジェクトを生成して描画
     for (size_t i = 0; i < app->drawInfos.size(); i++) {
         const Appearance::DrawInfo& info = app->drawInfos[i];
-        
+
         // Text オブジェクトを生成
         tvg::Text* textObj = tvg::Text::gen();
         if (!textObj) continue;
-        
+
         // フォントとサイズを設定
         textObj->font(fontName.c_str());
         textObj->size(font->fontSize);
-        
+
         // テキストを設定
         textObj->text(textUtf8.c_str());
-        
+
         // テキストパラメータを設定
         if (font->italic > 0) {
             textObj->italic(font->italic);
         }
         textObj->spacing(font->letterSpacing, font->lineSpacing);
-        
+
         // ストロークまたはフィルを設定
         if (info.type == 0) {
             // ストローク
@@ -1622,7 +1630,7 @@ RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL 
                 textObj->fill(info.fillR, info.fillG, info.fillB);
             }
         }
-        
+
         // トランスフォームを適用
         Matrix transform;
         transform.Translate(x + info.ox, y + info.oy);
@@ -1639,10 +1647,10 @@ RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL 
         tm.e32 = 0;
         tm.e33 = 1;
         textObj->transform(tm);
-        
+
         // キャンバスに追加
         canvas->add(textObj);
-        
+
         // バウンディングボックスを計算
         float bx, by, bw, bh;
         if (textObj->bounds(&bx, &by, &bw, &bh) == tvg::Result::Success) {
@@ -1655,11 +1663,11 @@ RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL 
             }
         }
     }
-    
+
     // 描画を実行
     canvas->draw();
     canvas->sync();
-    
+
     updateRect(totalBounds);
     return totalBounds;
 }
@@ -1667,28 +1675,28 @@ RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL 
 RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, REAL x, REAL y, REAL w, REAL h, REAL alignX, REAL alignY, int wrap, const tjs_char *text)
 {
     if (!canvas || !font || !text || !app) return RectF();
-    
+
     std::string fontName = wcharToUtf8(font->fontFamily.c_str());
     std::string textUtf8 = wcharToUtf8(text);
-    
+
     RectF totalBounds;
     bool first = true;
-    
+
     // Appearance の各描画情報に対して Text オブジェクトを生成して描画
     for (size_t i = 0; i < app->drawInfos.size(); i++) {
         const Appearance::DrawInfo& info = app->drawInfos[i];
-        
+
         // Text オブジェクトを生成
         tvg::Text* textObj = tvg::Text::gen();
         if (!textObj) continue;
-        
+
         // フォントとサイズを設定
         textObj->font(fontName.c_str());
         textObj->size(font->fontSize);
-        
+
         // テキストを設定
         textObj->text(textUtf8.c_str());
-        
+
         // 矩形領域用のレイアウトを設定
         textObj->layout(w, h);
         textObj->align(alignX, alignY);
@@ -1699,7 +1707,7 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
             textObj->italic(font->italic);
         }
         textObj->spacing(font->letterSpacing, font->lineSpacing);
-        
+
         // ストロークまたはフィルを設定
         if (info.type == 0) {
             // ストローク
@@ -1725,7 +1733,7 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
                 textObj->fill(info.fillR, info.fillG, info.fillB);
             }
         }
-        
+
         // トランスフォームを適用
         Matrix transform;
         transform.Translate(x + info.ox, y + info.oy);
@@ -1742,10 +1750,10 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
         tm.e32 = 0;
         tm.e33 = 1;
         textObj->transform(tm);
-        
+
         // キャンバスに追加
         canvas->add(textObj);
-        
+
         // バウンディングボックスを計算
         float bx, by, bw, bh;
         if (textObj->bounds(&bx, &by, &bw, &bh) == tvg::Result::Success) {
@@ -1758,11 +1766,11 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
             }
         }
     }
-    
+
     // 描画を実行
     canvas->draw();
     canvas->sync();
-    
+
     updateRect(totalBounds);
     return totalBounds;
 }
@@ -1801,23 +1809,23 @@ bool ::Image::load(const char* filename)
         picture = nullptr;
     }
     loaded = false;
-    
+
     picture = tvg::Picture::gen();
     if (!picture) return false;
-    
+
     if (picture->load(filename) != tvg::Result::Success) {
         tvg::Paint::rel(picture);
         picture = nullptr;
         return false;
     }
-    
+
     // サイズを取得
     float w, h;
     if (picture->size(&w, &h) == tvg::Result::Success) {
         imgWidth = w;
         imgHeight = h;
     }
-    
+
     loaded = true;
     return true;
 }
@@ -1829,7 +1837,7 @@ bool ::Image::load(const tjs_char* filename)
     if (resolved.length() == 0) {
         return false;
     }
-    
+
     // ローカルアクセス可能なパスを取得
     ttstr localname(TVPGetLocallyAccessibleName(resolved));
     if (localname.length()) {
@@ -1837,7 +1845,7 @@ bool ::Image::load(const tjs_char* filename)
         std::string utf8path = wcharToUtf8(localname.c_str());
         return load(utf8path.c_str());
     }
-    
+
     // ストリームから読み込む
     iTJSBinaryStream* stream = TVPCreateStream(resolved, TJS_BS_READ);
     if (!stream) return false;
@@ -1854,7 +1862,7 @@ bool ::Image::load(const tjs_char* filename)
         dataBuffer.clear();
         return false;
     }
-    
+
     // MIMEタイプを拡張子から推測
     const char* mimeType = nullptr;
     ttstr ext;
@@ -1868,7 +1876,7 @@ bool ::Image::load(const tjs_char* filename)
         else if (ext == TJS_W("svg")) mimeType = "svg";
         else if (ext == TJS_W("webp")) mimeType = "webp";
     }
-    
+
     return load(dataBuffer.data(), (uint32_t)dataBuffer.size(), mimeType);
 }
 
@@ -1879,23 +1887,23 @@ bool ::Image::load(const void* data, uint32_t size, const char* mimeType)
         picture = nullptr;
     }
     loaded = false;
-    
+
     picture = tvg::Picture::gen();
     if (!picture) return false;
-    
+
     if (picture->load((const char*)data, size, mimeType ? mimeType : "", nullptr, true) != tvg::Result::Success) {
         tvg::Paint::rel(picture);
         picture = nullptr;
         return false;
     }
-    
+
     // サイズを取得
     float w, h;
     if (picture->size(&w, &h) == tvg::Result::Success) {
         imgWidth = w;
         imgHeight = h;
     }
-    
+
     loaded = true;
     return true;
 }
@@ -1907,16 +1915,16 @@ bool ::Image::loadRaw(const uint32_t* data, uint32_t w, uint32_t h, bool copy)
         picture = nullptr;
     }
     loaded = false;
-    
+
     picture = tvg::Picture::gen();
     if (!picture) return false;
-    
+
     if (picture->load(data, w, h, tvg::ColorSpace::ARGB8888, copy) != tvg::Result::Success) {
         tvg::Paint::rel(picture);
         picture = nullptr;
         return false;
     }
-    
+
     imgWidth = (float)w;
     imgHeight = (float)h;
     loaded = true;
@@ -1962,7 +1970,7 @@ RectF LayerExDraw::drawImage(REAL x, REAL y, ::Image* src)
 {
     RectF rect;
     if (!src || !src->IsLoaded()) return rect;
-    
+
     RectF bounds = src->GetBounds();
     rect = drawImageRect(x + bounds.X, y + bounds.Y, src, 0, 0, bounds.Width, bounds.Height);
     updateRect(rect);
@@ -1984,14 +1992,14 @@ RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swi
 {
     RectF rect;
     if (!canvas || !src || !src->IsLoaded() || !src->getPicture()) return rect;
-    
+
     // 元画像を複製して使用
     tvg::Picture* pic = (tvg::Picture*)src->getPicture()->duplicate();
     if (!pic) return rect;
-    
+
     // ソース領域のクリッピング（ThorVGはソース領域の切り出しを直接サポートしていないため、
     // 変換行列で対応する）
-    
+
     // アフィン変換行列を計算
     PointF points[4];
     if (affine) {
@@ -2017,10 +2025,10 @@ RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swi
         points[3].X = C - A + E;
         points[3].Y = D - B + F;
     }
-    
+
     // サイズを設定
     pic->size(swidth, sheight);
-    
+
     // 変換行列を作成
     // 画像をソース領域からデスティネーションへ変換
     tvg::Matrix tm;
@@ -2033,13 +2041,13 @@ RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swi
     tm.e31 = 0;
     tm.e32 = 0;
     tm.e33 = 1;
-    
+
     pic->transform(tm);
-    
+
     canvas->add(pic);
     canvas->draw();
     canvas->sync();
-    
+
     // 描画領域を計算
     calcTransform.TransformPoints(points, 4);
     REAL minx = points[0].X;
@@ -2052,12 +2060,12 @@ RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swi
         if (points[i].Y < miny) miny = points[i].Y;
         if (points[i].Y > maxy) maxy = points[i].Y;
     }
-    
+
     rect.X = minx;
     rect.Y = miny;
     rect.Width = maxx - minx;
     rect.Height = maxy - miny;
-    
+
     updateRect(rect);
     return rect;
 }

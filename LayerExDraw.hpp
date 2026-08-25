@@ -542,9 +542,17 @@ protected:
 
 protected:
     // 描画スムージング指定。 SmoothingModeNone / HighSpeed のときは
-    // updateRect 前に applySmoothingPost で AA を打ち消す
+    // flushToLayer の合成前にスクラッチを二値化して AA を打ち消す
     int smoothingMode;
-    void applySmoothingPost(const RectF &rect);
+
+    // ThorVG は保持シーンの差分再描画時に「シーン外の既存画素」を damage
+    // 領域ごとクリアするため、 レイヤバッファへ直接 target すると krkrz 側で
+    // 描いた下地 (fillRect / ディザ結果など) が消える (線を引くたびにその
+    // バウンディング矩形が黒く抜ける)。 描画は常にこのスクラッチ
+    // (premultiplied ARGB、 トップダウン) へ行い、 draw のたびに
+    // flushToLayer でレイヤバッファ (straight ARGB) へ α 合成する。
+    std::vector<uint32_t> scratch;
+    void flushToLayer(const RectF &rect);
 
 public:
     int getSmoothingMode() {

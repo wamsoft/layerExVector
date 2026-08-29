@@ -80,4 +80,7 @@ endif()
 # 一覧に出さない (licenses/manifest.json の "when" と対応)。
 if(TVG_LOADER_LOTTIE)
     target_compile_definitions(layerExVector PRIVATE TVP_LICENSE_WITH_LOTTIE=1)
+    # 本体の install がライセンス文を書き出すかどうかの判定に使う
+    # (target のコンパイル定義は外から見えないため、 GLOBAL へも出しておく)。
+    set_property(GLOBAL APPEND PROPERTY KRKRZ_LICENSE_ACTIVE_MACROS TVP_LICENSE_WITH_LOTTIE)
 endif()

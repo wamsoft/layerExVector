@@ -74,3 +74,10 @@ krkrz_plugin(layerExVector
 if(TVG_LOADER_GW)
     target_compile_definitions(layerExVector PRIVATE LAYEREXVECTOR_TVG_GW=1)
 endif()
+
+# Lottie ローダが有効なときだけ、 Lottie 専用の同梱物 (JerryScript / RapidJSON)
+# のライセンスを登録する。 OFF のときはソースが 1 本もコンパイルされないので
+# 一覧に出さない (licenses/manifest.json の "when" と対応)。
+if(TVG_LOADER_LOTTIE)
+    target_compile_definitions(layerExVector PRIVATE TVP_LICENSE_WITH_LOTTIE=1)
+endif()

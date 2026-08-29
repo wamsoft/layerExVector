@@ -38,6 +38,7 @@ static const unsigned char lic_00[] = {
 	112,150,35,86,77,203,100,241,125,248,233,15,243,49,86,62,
 };
 /* JerryScript (1283 -> 727 bytes) */
+#if defined(TVP_LICENSE_WITH_LOTTIE)
 static const unsigned char lic_01[] = {
 	120,218,109,84,205,114,218,48,16,190,235,41,118,200,133,48,196,180,233,173,157,30,104,66,
 	168,91,106,51,216,36,205,137,145,237,181,81,42,75,174,36,67,252,246,93,25,72,200,164,
@@ -71,7 +72,9 @@ static const unsigned char lic_01[] = {
 	105,47,155,239,121,114,99,247,105,76,143,213,129,84,70,182,250,23,229,255,228,168,29,237,
 	105,240,15,203,49,182,172,
 };
+#endif
 /* RapidJSON (1273 -> 771 bytes) */
+#if defined(TVP_LICENSE_WITH_LOTTIE)
 static const unsigned char lic_02[] = {
 	120,218,93,83,75,111,219,56,16,190,235,87,12,220,75,2,104,189,109,129,61,108,129,30,
 	24,153,182,185,43,139,2,69,39,235,83,65,75,116,196,66,22,5,145,106,144,127,223,25,
@@ -107,12 +110,17 @@ static const unsigned char lic_02[] = {
 	47,27,193,22,58,31,43,254,63,32,108,56,203,17,171,162,97,178,248,214,188,254,14,242,
 	212,151,227,
 };
+#endif
 
 void RegisterLayerExVectorLicenses()
 {
 	TVPRegisterLicense(TJS_W("ThorVG"), TJS_W("plugin:layerExVector"), lic_00, 640, 1077);
+#if defined(TVP_LICENSE_WITH_LOTTIE)
 	TVPRegisterLicense(TJS_W("JerryScript"), TJS_W("plugin:layerExVector"), lic_01, 727, 1283);
+#endif
+#if defined(TVP_LICENSE_WITH_LOTTIE)
 	TVPRegisterLicense(TJS_W("RapidJSON"), TJS_W("plugin:layerExVector"), lic_02, 771, 1273);
+#endif
 }
 
 #else /* !TVP_HAS_LICENSE_API */

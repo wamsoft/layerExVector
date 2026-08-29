@@ -1,8 +1,8 @@
 {
   "comment": "layerExVector が同梱する第三者コンポーネントのライセンス。texts を更新したら core の licenses/gen_licenses_c.py --mode plugin で LicensesGen.cpp を再生成する。",
   "entries": [
-    { "name": "ThorVG",      "group": "plugin:layerExVector", "file": "../thorvg/LICENSE" },
-    { "name": "JerryScript", "group": "plugin:layerExVector", "file": "../thorvg/src/loaders/lottie/jerryscript/jerry-core/LICENSE" },
-    { "name": "RapidJSON",   "group": "plugin:layerExVector", "file": "../thorvg/src/loaders/lottie/rapidjson/LICENSE" }
+    { "name": "ThorVG",      "group": "plugin:layerExVector", "license": "MIT",       "file": "../thorvg/LICENSE" },
+    { "name": "JerryScript", "group": "plugin:layerExVector", "license": "Apache-2.0","file": "../thorvg/src/loaders/lottie/jerryscript/jerry-core/LICENSE", "when": "TVP_LICENSE_WITH_LOTTIE", "note": "Lottie Expressions の式評価用" },
+    { "name": "RapidJSON",   "group": "plugin:layerExVector", "license": "MIT",       "file": "../thorvg/src/loaders/lottie/rapidjson/LICENSE", "when": "TVP_LICENSE_WITH_LOTTIE", "note": "Lottie パーサ用" }
   ]
 }

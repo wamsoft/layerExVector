@@ -487,6 +487,19 @@ public:
         vector<tvg::Fill::ColorStop> colorStops;
         tvg::FillSpread gradSpread; // 範囲外の扱い (wrapMode)
 
+        // パスグラデーション (GDI+ PathGradientBrush 相当。 points 指定時)。
+        //   ThorVG に無いので、描画時に色の画像を作って図形をアルファマスクにして貼る
+        bool usePathGradient;
+        vector<REAL> pgX, pgY;       // 多角形の頂点
+        vector<ARGB> pgColors;       // 頂点ごとの色 (surroundColors。足りなければ最後を繰り返す)
+        REAL pgCx, pgCy;             // 中心点 (既定は頂点の平均)
+        ARGB pgCenterColor;          // 中心色 (既定は黒)
+        REAL pgFocusX, pgFocusY;     // focusScales (0 なら無し)
+        int  pgWrap;                 // WrapMode (既定 Tile)
+        vector<REAL> pgBlendPos, pgBlendFac;     // blend 系 (位置: 0=外周 1=中心)
+        vector<REAL> pgPresetPos;                // interpolationColors
+        vector<ARGB> pgPresetColors;
+
         // テクスチャ(タイル)フィル情報 (GDI+ TextureBrush 相当)
         bool useTextureFill;
         vector<uint32_t> texPixels; // ソースタイル ARGB8888 (texW*texH)
@@ -500,6 +513,8 @@ public:
             useLinearGradient(false), useRadialGradient(false),
             gradX1(0), gradY1(0), gradX2(0), gradY2(0),
             gradCx(0), gradCy(0), gradR(0), gradSpread(tvg::FillSpread::Pad),
+            usePathGradient(false), pgCx(0), pgCy(0), pgCenterColor(0xFF000000),
+            pgFocusX(0), pgFocusY(0), pgWrap(WrapModeTile),
             useTextureFill(false), texW(0), texH(0) {}
     };
     vector<DrawInfo> drawInfos;
@@ -690,6 +705,13 @@ protected:
      * Shapeを作成し、アピアランスを適用して描画
      */
     RectF drawShapeWithAppearance(const Appearance *app, tvg::Shape* shape);
+
+    /**
+     * パスグラデーションの塗り (塗り / 線とも)。 色の画像を作り、mask (図形) の
+     * アルファで切り抜いて canvas に置く。 mask の所有権は受け取る
+     * @return 置いた範囲 (デバイス座標)。 置けなかったら幅 0
+     */
+    RectF addPathGradientPaint(const Appearance::DrawInfo &info, tvg::Shape *mask, const tvg::Matrix &tm);
 
 public:
     /**

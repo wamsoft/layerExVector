@@ -235,6 +235,179 @@ static void applyBlendParams(ncbPropAccessor &info, ARGB c1, ARGB c2, vector<tvg
 }
 
 // --------------------------------------------------------
+// パスグラデーション (GDI+ PathGradientBrush 互換)
+// --------------------------------------------------------
+
+// blend 系の指定 (位置ごとの係数) を表にする。 interpolationColors は色の表。
+//   パスグラデーションの位置は 0 = 外周 / 1 = 中心 (GDI+ と同じ)
+static void readPathBlend(ncbPropAccessor &info, Appearance::DrawInfo &d)
+{
+    tTJSVariant var;
+    if (info.checkVariant(TJS_W("interpolationColors"), var) && var.Type() == tvtObject) {
+        vector<ARGB> colors; vector<REAL> pos;
+        ncbPropAccessor b(var);
+        tTJSVariant cv;
+        if (IsArray(var)) {
+            if (b.checkVariant((tjs_int)0, cv) && cv.Type() == tvtObject) readColors(cv, colors);
+            readReals(b, (tjs_int)1, pos);
+        } else {
+            if (b.checkVariant(TJS_W("presetColors"), cv) && cv.Type() == tvtObject) readColors(cv, colors);
+            readReals(b, TJS_W("blendPositions"), pos);
+        }
+        size_t n = colors.size() < pos.size() ? colors.size() : pos.size();
+        for (size_t i = 0; i < n; i++) { d.pgPresetPos.push_back(pos[i]); d.pgPresetColors.push_back(colors[i]); }
+    } else if (info.checkVariant(TJS_W("blend"), var) && var.Type() == tvtObject) {
+        vector<REAL> fac, pos;
+        ncbPropAccessor b(var);
+        if (IsArray(var)) { readReals(b, (tjs_int)0, fac); readReals(b, (tjs_int)1, pos); }
+        else { readReals(b, TJS_W("blendFactors"), fac); readReals(b, TJS_W("blendPositions"), pos); }
+        size_t n = fac.size() < pos.size() ? fac.size() : pos.size();
+        for (size_t i = 0; i < n; i++) { d.pgBlendPos.push_back(pos[i]); d.pgBlendFac.push_back(fac[i]); }
+    } else if (info.checkVariant(TJS_W("blendTriangularShape"), var) || info.checkVariant(TJS_W("blendBellShape"), var)) {
+        bool bell = !info.HasValue(TJS_W("blendTriangularShape"));
+        REAL focus, scale;
+        if (var.Type() == tvtObject && IsArray(var)) {
+            ncbPropAccessor s(var);
+            focus = (REAL)s.getRealValue(0); scale = (REAL)s.getRealValue(1, 1.0);
+        } else {
+            focus = (REAL)info.getRealValue(TJS_W("focus"), 0.5); scale = (REAL)info.getRealValue(TJS_W("scale"), 1.0);
+        }
+        const int N = bell ? 33 : 3;
+        for (int i = 0; i < N; i++) {
+            REAL t = bell ? (REAL)i / (N - 1) : (i == 0 ? 0 : i == 1 ? focus : 1);
+            double f;
+            if (!bell) f = (i == 1) ? 1 : 0;
+            else if (t <= focus) { double u = focus > 0 ? t / focus : 1; f = 0.5 * (1 + erf((u - 0.5) * 2 * 1.5)); }
+            else                 { double u = focus < 1 ? (1 - t) / (1 - focus) : 1; f = 0.5 * (1 + erf((u - 0.5) * 2 * 1.5)); }
+            d.pgBlendPos.push_back(t); d.pgBlendFac.push_back((REAL)(f * scale));
+        }
+    }
+}
+
+// GDI+ の PathGradientBrush と同じ指定を受ける。
+//   points (必須) / surroundColors (既定 白、足りなければ最後を繰り返す) /
+//   centerColor (既定 黒) / centerPoint (既定 頂点の平均) / focusScales /
+//   wrapMode (既定 Tile) / blend 系 / interpolationColors
+static void parsePathGradient(ncbPropAccessor &info, const tTJSVariant &pointsVar, Appearance::DrawInfo &d)
+{
+    ncbPropAccessor pts(pointsVar);
+    int n = pts.GetArrayCount();
+    for (int i = 0; i < n; i++) {
+        tTJSVariant pv;
+        if (!pts.checkVariant((tjs_int)i, pv)) continue;
+        PointF p = getPoint(pv);
+        d.pgX.push_back(p.X); d.pgY.push_back(p.Y);
+    }
+    if (d.pgX.size() < 2) return;
+    d.usePathGradient = true;
+
+    tTJSVariant var;
+    if (info.checkVariant(TJS_W("surroundColors"), var) && var.Type() == tvtObject) readColors(var, d.pgColors);
+    if (d.pgColors.empty()) d.pgColors.push_back(0xFFFFFFFF);
+    while (d.pgColors.size() < d.pgX.size()) d.pgColors.push_back(d.pgColors.back());
+
+    d.pgCenterColor = (ARGB)info.getIntValue(TJS_W("centerColor"), (tjs_int)0xFF000000);
+    if (info.checkVariant(TJS_W("centerPoint"), var)) {
+        PointF c = getPoint(var);
+        d.pgCx = c.X; d.pgCy = c.Y;
+    } else {
+        double sx = 0, sy = 0;
+        for (size_t i = 0; i < d.pgX.size(); i++) { sx += d.pgX[i]; sy += d.pgY[i]; }
+        d.pgCx = (REAL)(sx / d.pgX.size()); d.pgCy = (REAL)(sy / d.pgY.size());
+    }
+    if (info.checkVariant(TJS_W("focusScales"), var)) {
+        if (var.Type() == tvtObject && IsArray(var)) {
+            ncbPropAccessor s(var);
+            d.pgFocusX = (REAL)s.getRealValue(0); d.pgFocusY = (REAL)s.getRealValue(1);
+        }
+    } else if (info.HasValue(TJS_W("xScale")) || info.HasValue(TJS_W("yScale"))) {
+        d.pgFocusX = (REAL)info.getRealValue(TJS_W("xScale")); d.pgFocusY = (REAL)info.getRealValue(TJS_W("yScale"));
+    }
+    d.pgWrap = (int)info.getIntValue(TJS_W("wrapMode"), WrapModeTile);
+    readPathBlend(info, d);
+}
+
+// 表の位置 p (0..1) での値を線形補間で引く
+static REAL lookupTable(const vector<REAL> &pos, const vector<REAL> &val, REAL p)
+{
+    size_t n = pos.size();
+    if (n == 0) return p;
+    if (p <= pos[0]) return val[0];
+    for (size_t i = 1; i < n; i++) {
+        if (p <= pos[i]) {
+            REAL span = pos[i] - pos[i-1];
+            REAL t = span > 0 ? (p - pos[i-1]) / span : 0;
+            return val[i-1] + (val[i] - val[i-1]) * t;
+        }
+    }
+    return val[n-1];
+}
+static ARGB lookupColorTable(const vector<REAL> &pos, const vector<ARGB> &col, REAL p)
+{
+    size_t n = pos.size();
+    if (n == 0) return 0;
+    if (p <= pos[0]) return col[0];
+    for (size_t i = 1; i < n; i++) {
+        if (p <= pos[i]) {
+            REAL span = pos[i] - pos[i-1];
+            return lerpARGB(col[i-1], col[i], span > 0 ? (p - pos[i-1]) / span : 0);
+        }
+    }
+    return col[n-1];
+}
+
+// 範囲外の座標を外接矩形の中へ畳む (Tile は繰り返し、TileFlip* は折り返し)
+static REAL wrapCoord(REAL v, REAL lo, REAL w, bool flip)
+{
+    if (w <= 0) return v;
+    double r = (v - lo) / w;
+    double k = floor(r);
+    double f = (r - k) * w;
+    if (flip && ((long long)k & 1)) f = w - f;
+    return (REAL)(lo + f);
+}
+
+// 点 (qx, qy) の色。 中心と各辺 (Pi, Pi+1) の三角形で重心座標を取り、
+//   t = 中心 0 → 外周 1、s = 辺の上の位置。 色 = lerp(中心色, lerp(Ci, Ci+1, s), t)
+//   (= GDI+ の PathGradient)。 多角形の外は透明 (0)。 hint は前回当たった辺
+static ARGB pathGradientColor(const Appearance::DrawInfo &d, REAL qx, REAL qy, int &hint)
+{
+    const int n = (int)d.pgX.size();
+    const double cx = d.pgCx, cy = d.pgCy;
+    const double px = qx - cx, py = qy - cy;
+    for (int k = 0; k < n; k++) {
+        // 前回の辺から外側へ順に試す (隣の画素はたいてい同じ三角形)
+        int e = (k & 1) ? hint - (k + 1) / 2 : hint + k / 2;
+        e = ((e % n) + n) % n;
+        int e2 = (e + 1) % n;
+        double ax = d.pgX[e]  - cx, ay = d.pgY[e]  - cy;
+        double bx = d.pgX[e2] - cx, by = d.pgY[e2] - cy;
+        double det = ax * by - ay * bx;
+        if (fabs(det) < 1e-12) continue;
+        double a = (px * by - py * bx) / det;
+        double b = (ax * py - ay * px) / det;
+        const double eps = 1e-9;
+        if (a < -eps || b < -eps || a + b > 1 + eps) continue;
+        hint = e;
+        double t = a + b;
+        double s = t > 0 ? b / t : 0;
+        // focusScales: 中心側の縮小した多角形の中は中心色
+        if (d.pgFocusX > 0 || d.pgFocusY > 0) {
+            double dx = fabs(ax + (bx - ax) * s), dy = fabs(ay + (by - ay) * s);
+            double f = (dx + dy) > 0 ? (d.pgFocusX * dx + d.pgFocusY * dy) / (dx + dy) : 0;
+            if (f >= 1) t = 0;
+            else t = (t <= f) ? 0 : (t - f) / (1 - f);
+        }
+        REAL p = (REAL)(1 - t); // 位置: 0 = 外周 / 1 = 中心
+        if (!d.pgPresetPos.empty()) return lookupColorTable(d.pgPresetPos, d.pgPresetColors, p);
+        ARGB edge = lerpARGB(d.pgColors[e], d.pgColors[e2], (REAL)s);
+        REAL fac = d.pgBlendPos.empty() ? p : lookupTable(d.pgBlendPos, d.pgBlendFac, p);
+        return lerpARGB(edge, d.pgCenterColor, fac);
+    }
+    return 0;
+}
+
+// --------------------------------------------------------
 // アピアランス情報
 // --------------------------------------------------------
 
@@ -292,6 +465,7 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
         // ブラシ情報（辞書）
         ncbPropAccessor propInfo(colorOrBrush);
         int type = propInfo.getIntValue(TJS_W("type"), BrushTypeSolidColor);
+        tTJSVariant pathPoints;
 
         if (type == BrushTypeLinearGradient) {
             info.useLinearGradient = true;
@@ -346,7 +520,10 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
             info.colorStops.push_back(stop1);
             info.colorStops.push_back(stop2);
             applyBlendParams(propInfo, color1, color2, info.colorStops);
-        } else if (type == BrushTypePathGradient) { // PathGradient (RadialGradient として近似)
+        } else if (type == BrushTypePathGradient && propInfo.checkVariant(TJS_W("points"), pathPoints) && pathPoints.Type() == tvtObject) {
+            // GDI+ の PathGradientBrush と同じ計算 (描画時に色の画像を作る)
+            parsePathGradient(propInfo, pathPoints, info);
+        } else if (type == BrushTypePathGradient) { // points が無い: 放射グラデーションで近似 (旧来の radius 指定)
             info.useRadialGradient = true;
 
             tTJSVariant var;
@@ -444,11 +621,30 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
         info.strokeB = color & 0xFF;
     } else {
         ncbPropAccessor propInfo(colorOrBrush);
-        ARGB color = (ARGB)propInfo.getIntValue(TJS_W("color"), 0xFFFFFFFF);
-        info.strokeA = (color >> 24) & 0xFF;
-        info.strokeR = (color >> 16) & 0xFF;
-        info.strokeG = (color >> 8) & 0xFF;
-        info.strokeB = color & 0xFF;
+        int btype = propInfo.getIntValue(TJS_W("type"), BrushTypeSolidColor);
+        if (btype == BrushTypeLinearGradient || btype == BrushTypePathGradient) {
+            // GDI+ の Pen(brush): 線をブラシで塗る。 ブラシの解釈は addBrush と同じ
+            Appearance tmp;
+            tmp.addBrush(colorOrBrush, 0, 0);
+            const DrawInfo &b = tmp.drawInfos.back();
+            info.useLinearGradient = b.useLinearGradient;
+            info.useRadialGradient = b.useRadialGradient;
+            info.gradX1 = b.gradX1; info.gradY1 = b.gradY1; info.gradX2 = b.gradX2; info.gradY2 = b.gradY2;
+            info.gradCx = b.gradCx; info.gradCy = b.gradCy; info.gradR = b.gradR;
+            info.colorStops = b.colorStops; info.gradSpread = b.gradSpread;
+            info.usePathGradient = b.usePathGradient;
+            info.pgX = b.pgX; info.pgY = b.pgY; info.pgColors = b.pgColors;
+            info.pgCx = b.pgCx; info.pgCy = b.pgCy; info.pgCenterColor = b.pgCenterColor;
+            info.pgFocusX = b.pgFocusX; info.pgFocusY = b.pgFocusY; info.pgWrap = b.pgWrap;
+            info.pgBlendPos = b.pgBlendPos; info.pgBlendFac = b.pgBlendFac;
+            info.pgPresetPos = b.pgPresetPos; info.pgPresetColors = b.pgPresetColors;
+        } else {
+            ARGB color = (ARGB)propInfo.getIntValue(TJS_W("color"), 0xFFFFFFFF);
+            info.strokeA = (color >> 24) & 0xFF;
+            info.strokeR = (color >> 16) & 0xFF;
+            info.strokeG = (color >> 8) & 0xFF;
+            info.strokeB = color & 0xFF;
+        }
     }
 
     // 幅とオプション設定
@@ -1364,6 +1560,70 @@ void LayerExDraw::clear(ARGB argb)
     _pUpdate(0, NULL);
 }
 
+RectF LayerExDraw::addPathGradientPaint(const Appearance::DrawInfo &d, tvg::Shape *mask, const tvg::Matrix &tm)
+{
+    // 描く範囲 (デバイス座標)。 Clamp は多角形の外を塗らないので多角形の外接矩形で足りる。
+    // Tile / TileFlip* は外接矩形の外も繰り返すのでクリップ範囲全体
+    double x0, y0, x1, y1;
+    int cl = clipWidth  > 0 ? clipLeft : 0, ct = clipHeight > 0 ? clipTop : 0;
+    int cw = clipWidth  > 0 ? clipWidth  : width, ch = clipHeight > 0 ? clipHeight : height;
+    if (d.pgWrap == WrapModeClamp) {
+        x0 = y0 = 1e30; x1 = y1 = -1e30;
+        for (size_t i = 0; i < d.pgX.size(); i++) {
+            double dx = tm.e11 * d.pgX[i] + tm.e12 * d.pgY[i] + tm.e13;
+            double dy = tm.e21 * d.pgX[i] + tm.e22 * d.pgY[i] + tm.e23;
+            if (dx < x0) x0 = dx; if (dx > x1) x1 = dx;
+            if (dy < y0) y0 = dy; if (dy > y1) y1 = dy;
+        }
+        x0 = floor(x0) - 1; y0 = floor(y0) - 1; x1 = ceil(x1) + 1; y1 = ceil(y1) + 1;
+        if (x0 < cl) x0 = cl; if (y0 < ct) y0 = ct;
+        if (x1 > cl + cw) x1 = cl + cw; if (y1 > ct + ch) y1 = ct + ch;
+    } else {
+        x0 = cl; y0 = ct; x1 = cl + cw; y1 = ct + ch;
+    }
+    int ox = (int)x0, oy = (int)y0, W = (int)(x1 - x0), H = (int)(y1 - y0);
+    double det = tm.e11 * tm.e22 - tm.e12 * tm.e21;
+    if (W <= 0 || H <= 0 || fabs(det) < 1e-12) { tvg::Paint::rel(mask); return RectF(); }
+
+    // 多角形の外接矩形 (Tile / TileFlip* の畳み込み用。 ユーザー座標)
+    REAL bx0 = d.pgX[0], by0 = d.pgY[0], bx1 = bx0, by1 = by0;
+    for (size_t i = 1; i < d.pgX.size(); i++) {
+        if (d.pgX[i] < bx0) bx0 = d.pgX[i]; if (d.pgX[i] > bx1) bx1 = d.pgX[i];
+        if (d.pgY[i] < by0) by0 = d.pgY[i]; if (d.pgY[i] > by1) by1 = d.pgY[i];
+    }
+    bool wrap  = d.pgWrap != WrapModeClamp;
+    bool flipX = d.pgWrap == WrapModeTileFlipX || d.pgWrap == WrapModeTileFlipXY;
+    bool flipY = d.pgWrap == WrapModeTileFlipY || d.pgWrap == WrapModeTileFlipXY;
+
+    // 画素の中心をユーザー座標へ戻して色を決める (ARGB、 乗算済みでない)
+    std::vector<uint32_t> buf((size_t)W * H, 0);
+    int hint = 0;
+    for (int y = 0; y < H; y++) {
+        double dy = oy + y + 0.5 - tm.e23;
+        for (int x = 0; x < W; x++) {
+            double dx = ox + x + 0.5 - tm.e13;
+            REAL ux = (REAL)(( tm.e22 * dx - tm.e12 * dy) / det);
+            REAL uy = (REAL)((-tm.e21 * dx + tm.e11 * dy) / det);
+            if (wrap && (ux < bx0 || ux > bx1 || uy < by0 || uy > by1)) {
+                ux = wrapCoord(ux, bx0, bx1 - bx0, flipX);
+                uy = wrapCoord(uy, by0, by1 - by0, flipY);
+            }
+            buf[(size_t)y * W + x] = pathGradientColor(d, ux, uy, hint);
+        }
+    }
+
+    tvg::Picture* pic = tvg::Picture::gen();
+    if (!pic || pic->load(buf.data(), W, H, tvg::ColorSpace::ARGB8888S, true) != tvg::Result::Success) {
+        if (pic) tvg::Paint::rel(pic);
+        tvg::Paint::rel(mask);
+        return RectF();
+    }
+    pic->translate((float)ox, (float)oy);
+    pic->mask(mask, tvg::MaskMethod::Alpha); // 図形のアルファで切り抜く (所有権は pic へ)
+    canvas->add(pic);
+    return RectF((REAL)ox, (REAL)oy, (REAL)W, (REAL)H);
+}
+
 RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* baseShape)
 {
     if (!canvas || !app || !baseShape) {
@@ -1411,6 +1671,21 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
                 // ThorVG は破線の区切りごとに線端を付ける。 GDI+ は区切りの端を DashCap
                 // (既定 Flat) で描くので合わせる (Square のままだと隙間が埋まる)
                 shape->strokeCap(info.dashCap == DashCapRound ? tvg::StrokeCap::Round : tvg::StrokeCap::Butt);
+            }
+
+            // 線をブラシで塗る (Pen(brush))。 パスグラデーションは下で別に扱う
+            if (info.useLinearGradient) {
+                tvg::LinearGradient* g = tvg::LinearGradient::gen();
+                g->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
+                g->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                g->spread(info.gradSpread);
+                shape->strokeFill(g);
+            } else if (info.useRadialGradient && !info.usePathGradient) {
+                tvg::RadialGradient* g = tvg::RadialGradient::gen();
+                g->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
+                g->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                g->spread(info.gradSpread);
+                shape->strokeFill(g);
             }
 
             // フィル色を透明に
@@ -1479,6 +1754,23 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
 
             // ストロークなし
             shape->strokeWidth(0);
+        }
+
+        if (info.usePathGradient) {
+            // 図形 (塗りなら塗り、線なら線) を不透明の白にしてアルファマスクにする
+            if (info.type == 0) {
+                shape->strokeFill(255, 255, 255, 255);
+                shape->fill(0, 0, 0, 0);
+            } else {
+                shape->fill(255, 255, 255, 255);
+                shape->strokeWidth(0);
+            }
+            RectF r = addPathGradientPaint(info, shape, tm); // shape の所有権は移る
+            if (r.Width > 0 && r.Height > 0) {
+                if (first) { totalBounds = r; first = false; }
+                else RectF::Union(totalBounds, totalBounds, r);
+            }
+            continue;
         }
 
         canvas->add(shape);

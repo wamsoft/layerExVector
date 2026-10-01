@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <vector>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -161,6 +162,7 @@ public:
 
 // Forward declarations
 class Image;
+class RecordData;
 
 /**
  * GDIPlus PointF 互換構造体
@@ -713,6 +715,32 @@ protected:
      */
     RectF addPathGradientPaint(const Appearance::DrawInfo &info, tvg::Shape *mask, const tvg::Matrix &tm);
 
+    /**
+     * drawShapeWithAppearance の本体。 base はユーザー座標 → デバイス座標の行列
+     * (通常は calcTransform)。 userOffset が真なら Appearance のずらし (ox/oy) を
+     * base の前 (ユーザー座標) に掛ける (記録の描き直しで拡大縮小に追従させる)
+     */
+    RectF drawShapeWithAppearanceM(const Appearance *app, tvg::Shape* shape, const tvg::Matrix &base, bool userOffset);
+
+    /**
+     * 記録の画像を描く。 map は記録座標 → 描き先 (ユーザー座標)。
+     * 元の範囲 (sleft, stop, swidth, sheight) を写した描き先の範囲で切り抜く
+     */
+    RectF drawRecordImage(const RecordData &rec, const tvg::Matrix &map, REAL sleft, REAL stop, REAL swidth, REAL sheight);
+
+    std::shared_ptr<RecordData> recording; // record 中の記録
+
+public:
+    // 描画内容の記録 (GDI+ の Metafile 相当)
+    bool getRecord() const { return (bool)recording; }
+    void setRecord(bool rec);
+    // 記録内容の写しを持つ Image を返す (呼び出し側が所有)。 record 中でなければ null
+    ::Image* getRecordImage();
+    // TJS 向け (GdiPlus.Image で包む。本体は main.cpp)
+    tTJSVariant getRecordImageVariant();
+
+protected:
+
 public:
     /**
      * 画面の消去
@@ -969,6 +997,7 @@ protected:
     float imgWidth;
     float imgHeight;
     bool loaded;
+    std::shared_ptr<RecordData> record; // Layer.getRecordImage の記録 (picture の代わり)
 
 public:
     Image();
@@ -994,11 +1023,41 @@ public:
     // プロパティ
     float GetWidth() const { return imgWidth; }
     float GetHeight() const { return imgHeight; }
-    RectF GetBounds() const { return RectF(0, 0, imgWidth, imgHeight); }
+    RectF GetBounds() const; // 記録の画像は記録内容の外接矩形 (記録座標)
     bool IsLoaded() const { return loaded; }
+
+    // 記録の画像 (Layer.getRecordImage)
+    bool IsRecord() const { return (bool)record; }
+    RecordData* getRecord() const { return record.get(); }
+    void setRecord(std::shared_ptr<RecordData> r);
 
     // サイズ変更（描画時のサイズに影響）
     void SetSize(float w, float h);
+};
+
+// --------------------------------------------------------
+// Layer.record / getRecordImage の記録 (GDI+ の Metafile 相当)。
+//   描画命令 (図形のパス + Appearance の写し + 記録時の transform) の一覧で持ち、
+//   drawImage* で「元の範囲 → 描き先」の写像を掛けて描き直す (ベクタのまま拡大縮小できる)。
+//   ⚠ 記録するのは図形の描画 (drawShapeWithAppearance を通るもの) だけ。文字と画像は記録しない
+// --------------------------------------------------------
+class RecordData {
+public:
+    struct Entry {
+        Appearance app;          // 見た目の写し
+        tvg::Shape* shape;       // 変換前のパス (RecordData が所有)
+        tvg::Matrix transform;   // 記録時の Layer の transform (viewTransform は含めない。GDI+ と同じ)
+    };
+    vector<Entry> entries;
+    RectF bounds;    // 記録内容の外接矩形 (記録座標。線の太さ込み)
+    bool hasBounds;
+
+    RecordData() : hasBounds(false) {}
+    RecordData(const RecordData& o);   // 図形も複製する
+    ~RecordData();
+    void add(const Appearance* app, const tvg::Shape* base, const tvg::Matrix& tr);
+private:
+    RecordData& operator=(const RecordData&);
 };
 
 // 画像読み込みヘルパー関数

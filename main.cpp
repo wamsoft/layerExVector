@@ -630,8 +630,31 @@ NCB_GET_INSTANCE_HOOK(LayerExDraw)
 };
 
 // フックつきアタッチ
+// Layer.getRecordImage(): 記録の写しを持つ GdiPlus.Image を返す
+tTJSVariant LayerExDraw::getRecordImageVariant()
+{
+	LayerExDraw *self = this;
+	typedef ncbInstanceAdaptor<Image> AdaptorT;
+	tTJSVariant ret;
+	if (!self) return ret;
+	Image *img = self->getRecordImage();
+	if (img) {
+		iTJSDispatch2 *adpobj = AdaptorT::CreateAdaptor(img);
+		if (adpobj) {
+			ret = tTJSVariant(adpobj, adpobj);
+			adpobj->Release();
+		} else {
+			delete img;
+		}
+	}
+	return ret;
+}
+
 NCB_ATTACH_CLASS_WITH_HOOK(LayerExDraw, Layer) {
 	NCB_PROPERTY(updateWhenDraw, getUpdateWhenDraw, setUpdateWhenDraw);
+	// 描画内容の記録 (GDI+ の Metafile 相当。 図形の描画だけ)
+	NCB_PROPERTY(record, getRecord, setRecord);
+	Method(TJS_W("getRecordImage"), &Class::getRecordImageVariant);
 	NCB_PROPERTY(smoothingMode, getSmoothingMode, setSmoothingMode);
 	
 	NCB_METHOD(setViewTransform);

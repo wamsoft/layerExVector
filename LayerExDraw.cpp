@@ -14,6 +14,8 @@
 // thorvg 初期化
 #ifdef LAYEREXVECTOR_TVG_GW
 #include "thorvg_gw_bridge.h"
+
+static tvg::Matrix mulMatrix(const tvg::Matrix &a, const tvg::Matrix &b);
 #endif
 
 extern void RegisterLayerExVectorLicenses();   // LicensesGen.cpp (生成物)
@@ -1624,7 +1626,64 @@ RectF LayerExDraw::addPathGradientPaint(const Appearance::DrawInfo &d, tvg::Shap
     return RectF((REAL)ox, (REAL)oy, (REAL)W, (REAL)H);
 }
 
+
+void LayerExDraw::setRecord(bool rec)
+{
+    if (rec) { if (!recording) recording = std::make_shared<RecordData>(); }
+    else recording.reset();
+}
+
+::Image* LayerExDraw::getRecordImage()
+{
+    if (!recording) return nullptr;
+    // 写しを渡す (この後の記録は画像に混ざらない。 GDI+ も記録を閉じて新しく始め直す)
+    ::Image* img = new ::Image();
+    img->setRecord(std::make_shared<RecordData>(*recording));
+    return img;
+}
+
+RectF LayerExDraw::drawRecordImage(const RecordData &rec, const tvg::Matrix &map, REAL sleft, REAL stop, REAL swidth, REAL sheight)
+{
+    // 元の範囲を描き先 (デバイス座標) へ写した外接矩形で切り抜く
+    tvg::Matrix toDev = mulMatrix(calcTransform.m, map);
+    REAL sx[4] = { sleft, sleft + swidth, sleft, sleft + swidth };
+    REAL sy[4] = { stop,  stop,           stop + sheight, stop + sheight };
+    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    for (int i = 0; i < 4; i++) {
+        double x = toDev.e11 * sx[i] + toDev.e12 * sy[i] + toDev.e13;
+        double y = toDev.e21 * sx[i] + toDev.e22 * sy[i] + toDev.e23;
+        if (i == 0 || x < x0) x0 = x; if (i == 0 || x > x1) x1 = x;
+        if (i == 0 || y < y0) y0 = y; if (i == 0 || y > y1) y1 = y;
+    }
+    int cl = clipWidth  > 0 ? clipLeft : 0, ct = clipHeight > 0 ? clipTop : 0;
+    int cw = clipWidth  > 0 ? clipWidth  : width, ch = clipHeight > 0 ? clipHeight : height;
+    int vx0 = (int)floor(x0 + 0.5), vy0 = (int)floor(y0 + 0.5), vx1 = (int)floor(x1 + 0.5), vy1 = (int)floor(y1 + 0.5);
+    if (vx0 < cl) vx0 = cl; if (vy0 < ct) vy0 = ct;
+    if (vx1 > cl + cw) vx1 = cl + cw; if (vy1 > ct + ch) vy1 = ct + ch;
+    if (vx1 <= vx0 || vy1 <= vy0) return RectF();
+
+    canvas->viewport(vx0, vy0, vx1 - vx0, vy1 - vy0);
+    for (size_t i = 0; i < rec.entries.size(); i++) {
+        const RecordData::Entry &e = rec.entries[i];
+        if (!e.shape) continue;
+        tvg::Matrix m = mulMatrix(toDev, e.transform);
+        drawShapeWithAppearanceM(&e.app, (tvg::Shape*)e.shape->duplicate(), m, true);
+    }
+    canvas->viewport(cl, ct, cw, ch);
+
+    RectF r((REAL)vx0, (REAL)vy0, (REAL)(vx1 - vx0), (REAL)(vy1 - vy0));
+    updateRect(r);
+    return r;
+}
+
 RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* baseShape)
+{
+    // record 中は描画命令を記録する (GDI+ と同じく transform まで。 viewTransform は含めない)
+    if (recording && app && baseShape) recording->add(app, baseShape, transform.m);
+    return drawShapeWithAppearanceM(app, baseShape, calcTransform.m, false);
+}
+
+RectF LayerExDraw::drawShapeWithAppearanceM(const Appearance *app, tvg::Shape* baseShape, const tvg::Matrix &base, bool userOffset)
 {
     if (!canvas || !app || !baseShape) {
         tvg::Paint::rel(baseShape);
@@ -1644,12 +1703,18 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
 
         // オフセットとトランスフォームを適用
         tvg::Matrix tm;
-        tm.e11 = calcTransform.m.e11;
-        tm.e12 = calcTransform.m.e12;
-        tm.e13 = calcTransform.m.e13 + info.ox;
-        tm.e21 = calcTransform.m.e21;
-        tm.e22 = calcTransform.m.e22;
-        tm.e23 = calcTransform.m.e23 + info.oy;
+        tm.e11 = base.e11;
+        tm.e12 = base.e12;
+        tm.e21 = base.e21;
+        tm.e22 = base.e22;
+        if (userOffset) {
+            // ずらしをユーザー座標で掛ける (記録の描き直しで拡大縮小に追従)
+            tm.e13 = base.e11 * info.ox + base.e12 * info.oy + base.e13;
+            tm.e23 = base.e21 * info.ox + base.e22 * info.oy + base.e23;
+        } else {
+            tm.e13 = base.e13 + info.ox;
+            tm.e23 = base.e23 + info.oy;
+        }
         tm.e31 = 0;
         tm.e32 = 0;
         tm.e33 = 1;
@@ -2278,8 +2343,9 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
 {
 }
 
-::Image::Image(const ::Image& orig) : picture(nullptr), imgWidth(orig.imgWidth), imgHeight(orig.imgHeight), loaded(false)
+::Image::Image(const ::Image& orig) : picture(nullptr), imgWidth(orig.imgWidth), imgHeight(orig.imgHeight), loaded(false), record(orig.record)
 {
+    if (record) loaded = true; // 記録の画像は記録を共有する (中身は不変)
     if (orig.picture && orig.loaded) {
         // ThorVG Picture を複製
         picture = (tvg::Picture*)orig.picture->duplicate();
@@ -2440,6 +2506,89 @@ void ::Image::SetSize(float w, float h)
     }
 }
 
+
+// --------------------------------------------------------
+// 記録 (Layer.record / getRecordImage)
+// --------------------------------------------------------
+
+// a × b (列ベクトル。 b を先に適用する)
+static tvg::Matrix mulMatrix(const tvg::Matrix &a, const tvg::Matrix &b)
+{
+    tvg::Matrix r;
+    r.e11 = a.e11 * b.e11 + a.e12 * b.e21;
+    r.e12 = a.e11 * b.e12 + a.e12 * b.e22;
+    r.e13 = a.e11 * b.e13 + a.e12 * b.e23 + a.e13;
+    r.e21 = a.e21 * b.e11 + a.e22 * b.e21;
+    r.e22 = a.e21 * b.e12 + a.e22 * b.e22;
+    r.e23 = a.e21 * b.e13 + a.e22 * b.e23 + a.e23;
+    r.e31 = 0; r.e32 = 0; r.e33 = 1;
+    return r;
+}
+
+RecordData::RecordData(const RecordData& o) : bounds(o.bounds), hasBounds(o.hasBounds)
+{
+    for (size_t i = 0; i < o.entries.size(); i++) {
+        Entry e = o.entries[i];
+        e.shape = o.entries[i].shape ? (tvg::Shape*)o.entries[i].shape->duplicate() : nullptr;
+        entries.push_back(e);
+    }
+}
+
+RecordData::~RecordData()
+{
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (entries[i].shape) tvg::Paint::rel(entries[i].shape);
+    }
+}
+
+void RecordData::add(const Appearance* app, const tvg::Shape* base, const tvg::Matrix& tr)
+{
+    Entry e;
+    e.app = *app;
+    e.shape = (tvg::Shape*)base->duplicate();
+    e.transform = tr;
+    if (!e.shape) return;
+    entries.push_back(e);
+
+    // 外接矩形 (記録座標)。 線は太さの半分だけ広げる
+    const tvg::PathCommand* cmds = nullptr; uint32_t nc = 0;
+    const tvg::Point* pts = nullptr; uint32_t np = 0;
+    if (base->path(&cmds, &nc, &pts, &np) != tvg::Result::Success || np == 0) return;
+    REAL x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    for (uint32_t i = 0; i < np; i++) {
+        REAL x = tr.e11 * pts[i].x + tr.e12 * pts[i].y + tr.e13;
+        REAL y = tr.e21 * pts[i].x + tr.e22 * pts[i].y + tr.e23;
+        if (i == 0 || x < x0) x0 = x; if (i == 0 || x > x1) x1 = x;
+        if (i == 0 || y < y0) y0 = y; if (i == 0 || y > y1) y1 = y;
+    }
+    REAL margin = 0;
+    REAL scale = (REAL)sqrt(fabs(tr.e11 * tr.e22 - tr.e12 * tr.e21));
+    REAL dx0 = 0, dy0 = 0, dx1 = 0, dy1 = 0; bool firstOfs = true;
+    for (size_t i = 0; i < app->drawInfos.size(); i++) {
+        const Appearance::DrawInfo &d = app->drawInfos[i];
+        if (d.type == 0 && d.strokeWidth * scale / 2 > margin) margin = d.strokeWidth * scale / 2;
+        if (firstOfs || d.ox < dx0) dx0 = d.ox; if (firstOfs || d.ox > dx1) dx1 = d.ox;
+        if (firstOfs || d.oy < dy0) dy0 = d.oy; if (firstOfs || d.oy > dy1) dy1 = d.oy;
+        firstOfs = false;
+    }
+    RectF r(x0 + dx0 - margin, y0 + dy0 - margin, (x1 - x0) + (dx1 - dx0) + margin * 2, (y1 - y0) + (dy1 - dy0) + margin * 2);
+    if (!hasBounds) { bounds = r; hasBounds = true; }
+    else RectF::Union(bounds, bounds, r);
+}
+
+void ::Image::setRecord(std::shared_ptr<RecordData> r)
+{
+    record = r;
+    loaded = (bool)r;
+    if (r && r->hasBounds) { imgWidth = r->bounds.Width; imgHeight = r->bounds.Height; }
+}
+
+RectF (::Image::GetBounds)() const
+{
+    if (record) return record->hasBounds ? record->bounds : RectF();
+    return RectF(0, 0, imgWidth, imgHeight);
+}
+
 // グローバルヘルパー関数
 ::Image* loadImage(const tjs_char* name)
 {
@@ -2467,6 +2616,7 @@ RectF LayerExDraw::drawImage(REAL x, REAL y, ::Image* src)
     if (!src || !src->IsLoaded()) return rect;
 
     RectF bounds = src->GetBounds();
+    // 記録の画像も同じ式 (GDI+ と同じく、記録座標の (0,0) が描き先の (x + bounds.X, y + bounds.Y) に来る)
     rect = drawImageRect(x + bounds.X, y + bounds.Y, src, 0, 0, bounds.Width, bounds.Height);
     updateRect(rect);
     return rect;
@@ -2486,6 +2636,23 @@ RectF LayerExDraw::drawImageStretch(REAL dleft, REAL dtop, REAL dwidth, REAL dhe
 RectF LayerExDraw::drawImageAffine(::Image* src, REAL sleft, REAL stop, REAL swidth, REAL sheight, bool affine, REAL A, REAL B, REAL C, REAL D, REAL E, REAL F)
 {
     RectF rect;
+    if (canvas && src && src->IsRecord() && src->getRecord()) {
+        // 記録 (getRecordImage) の画像: 記録座標の元の範囲 → 描き先 の写像を掛けて描き直す。
+        //   GDI+ と同じく元の範囲は記録したときの座標そのもの (外接矩形の左上が原点ではない)
+        if (swidth == 0 || sheight == 0) return rect;
+        tvg::Matrix map;
+        if (affine) { // x' = A x + C y + E (x は元の範囲の左上からの位置)
+            map.e11 = A; map.e12 = C; map.e13 = E - (A * sleft + C * stop);
+            map.e21 = B; map.e22 = D; map.e23 = F - (B * sleft + D * stop);
+        } else {      // 3 点指定 (A,B)=左上 (C,D)=右上 (E,F)=左下
+            REAL ux = (C - A) / swidth, uy = (D - B) / swidth;
+            REAL vx = (E - A) / sheight, vy = (F - B) / sheight;
+            map.e11 = ux; map.e12 = vx; map.e13 = A - (ux * sleft + vx * stop);
+            map.e21 = uy; map.e22 = vy; map.e23 = B - (uy * sleft + vy * stop);
+        }
+        map.e31 = 0; map.e32 = 0; map.e33 = 1;
+        return drawRecordImage(*src->getRecord(), map, sleft, stop, swidth, sheight);
+    }
     if (!canvas || !src || !src->IsLoaded() || !src->getPicture()) return rect;
 
     // 元画像を複製して使用

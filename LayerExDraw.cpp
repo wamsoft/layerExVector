@@ -82,6 +82,159 @@ static void getReals(const tTJSVariant &var, vector<REAL> &points)
 }
 
 // --------------------------------------------------------
+// グラデーションの GDI+ 互換 (rect / mode / angle / wrapMode / blend 系)
+// --------------------------------------------------------
+
+static tvg::Fill::ColorStop makeStop(REAL offset, ARGB c)
+{
+    tvg::Fill::ColorStop s;
+    s.offset = offset;
+    s.a = (c >> 24) & 0xFF;
+    s.r = (c >> 16) & 0xFF;
+    s.g = (c >> 8) & 0xFF;
+    s.b = c & 0xFF;
+    return s;
+}
+
+static ARGB lerpARGB(ARGB c1, ARGB c2, REAL t)
+{
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    ARGB r = 0;
+    for (int sh = 0; sh <= 24; sh += 8) {
+        int a = (c1 >> sh) & 0xFF, b = (c2 >> sh) & 0xFF;
+        r |= (ARGB)((int)(a + (b - a) * t + 0.5f) & 0xFF) << sh;
+    }
+    return r;
+}
+
+// GDI+ の WrapMode → ThorVG の FillSpread
+static tvg::FillSpread toSpread(int wrapMode)
+{
+    switch (wrapMode) {
+    case WrapModeTileFlipX:
+    case WrapModeTileFlipY:
+    case WrapModeTileFlipXY: return tvg::FillSpread::Reflect;
+    case WrapModeClamp:      return tvg::FillSpread::Pad;
+    default:                 return tvg::FillSpread::Repeat; // WrapModeTile (GDI+ の既定)
+    }
+}
+
+// LinearGradientBrush(rect, c1, c2, angle, isAngleScalable) と同じ始点・終点を求める。
+//   角度方向の単位ベクトルへ矩形の 4 隅を射影し、最小 → 最大を色 1 → 色 2 にする。
+//   isAngleScalable は角度を矩形の縦横比で補正する (tanθ' = tanθ * w / h)。
+//   mode 指定は 横 0° / 縦 90° / 順斜め 45° / 逆斜め 135° (斜めは縦横比で補正)
+static void linearPointsFromRect(const RectF &rect, REAL angle, bool scalable,
+                                 REAL &x1, REAL &y1, REAL &x2, REAL &y2)
+{
+    double rad = angle * M_PI / 180.0;
+    double dx = cos(rad), dy = sin(rad);
+    if (scalable) {
+        dx *= rect.Height;
+        dy *= rect.Width;
+    }
+    double len = sqrt(dx * dx + dy * dy);
+    if (len <= 0) { dx = 1; dy = 0; len = 1; }
+    dx /= len; dy /= len;
+    double cx[4] = { rect.X, rect.X + rect.Width, rect.X,               rect.X + rect.Width };
+    double cy[4] = { rect.Y, rect.Y,              rect.Y + rect.Height, rect.Y + rect.Height };
+    double tmin = 0, tmax = 0;
+    for (int i = 0; i < 4; i++) {
+        double t = cx[i] * dx + cy[i] * dy;
+        if (i == 0 || t < tmin) tmin = t;
+        if (i == 0 || t > tmax) tmax = t;
+    }
+    x1 = (REAL)(dx * tmin); y1 = (REAL)(dy * tmin);
+    x2 = (REAL)(dx * tmax); y2 = (REAL)(dy * tmax);
+}
+
+static void readReals(ncbPropAccessor &acc, tjs_int index, vector<REAL> &out)
+{
+    tTJSVariant v;
+    if (acc.checkVariant(index, v) && v.Type() == tvtObject) getReals(v, out);
+}
+static void readReals(ncbPropAccessor &acc, const tjs_char *key, vector<REAL> &out)
+{
+    tTJSVariant v;
+    if (acc.checkVariant(key, v) && v.Type() == tvtObject) getReals(v, out);
+}
+static void readColors(const tTJSVariant &var, vector<ARGB> &out)
+{
+    ncbPropAccessor info(var);
+    int c = info.GetArrayCount();
+    for (int i = 0; i < c; i++) out.push_back((ARGB)info.getIntValue(i));
+}
+
+// GDI+ の色の配分指定 (commonBrushParameter) をカラーストップへ置き換える。
+//   blend               … 位置ごとの係数 (0=色1 / 1=色2)
+//   blendBellShape      … 釣鐘形 (正規分布) を 33 点で近似
+//   blendTriangularShape… 三角形 (focus で色 2 に達し両端は色 1)
+//   interpolationColors … 位置ごとの色 (多色)
+//   ⚠ useGammaCorrection は再現しない (受けるだけ)
+static void applyBlendParams(ncbPropAccessor &info, ARGB c1, ARGB c2, vector<tvg::Fill::ColorStop> &stops)
+{
+    tTJSVariant var;
+    vector<tvg::Fill::ColorStop> r;
+    if (info.checkVariant(TJS_W("interpolationColors"), var) && var.Type() == tvtObject) {
+        vector<ARGB> colors;
+        vector<REAL> pos;
+        ncbPropAccessor b(var);
+        if (IsArray(var)) {
+            tTJSVariant cv;
+            if (b.checkVariant((tjs_int)0, cv) && cv.Type() == tvtObject) readColors(cv, colors);
+            readReals(b, (tjs_int)1, pos);
+        } else {
+            tTJSVariant cv;
+            if (b.checkVariant(TJS_W("presetColors"), cv) && cv.Type() == tvtObject) readColors(cv, colors);
+            readReals(b, TJS_W("blendPositions"), pos);
+        }
+        size_t n = colors.size() < pos.size() ? colors.size() : pos.size();
+        for (size_t i = 0; i < n; i++) r.push_back(makeStop(pos[i], colors[i]));
+    } else if (info.checkVariant(TJS_W("blend"), var) && var.Type() == tvtObject) {
+        vector<REAL> factors, pos;
+        ncbPropAccessor b(var);
+        if (IsArray(var)) {
+            readReals(b, (tjs_int)0, factors);
+            readReals(b, (tjs_int)1, pos);
+        } else {
+            readReals(b, TJS_W("blendFactors"), factors);
+            readReals(b, TJS_W("blendPositions"), pos);
+        }
+        size_t n = factors.size() < pos.size() ? factors.size() : pos.size();
+        for (size_t i = 0; i < n; i++) r.push_back(makeStop(pos[i], lerpARGB(c1, c2, factors[i])));
+    } else if (info.checkVariant(TJS_W("blendTriangularShape"), var)) {
+        REAL focus, scale;
+        if (var.Type() == tvtObject && IsArray(var)) {
+            ncbPropAccessor s(var);
+            focus = (REAL)s.getRealValue(0); scale = (REAL)s.getRealValue(1, 1.0);
+        } else {
+            focus = (REAL)info.getRealValue(TJS_W("focus"), 0.5); scale = (REAL)info.getRealValue(TJS_W("scale"), 1.0);
+        }
+        if (focus > 0) r.push_back(makeStop(0, c1));
+        r.push_back(makeStop(focus, lerpARGB(c1, c2, scale)));
+        if (focus < 1) r.push_back(makeStop(1, c1));
+    } else if (info.checkVariant(TJS_W("blendBellShape"), var)) {
+        REAL focus, scale;
+        if (var.Type() == tvtObject && IsArray(var)) {
+            ncbPropAccessor s(var);
+            focus = (REAL)s.getRealValue(0); scale = (REAL)s.getRealValue(1, 1.0);
+        } else {
+            focus = (REAL)info.getRealValue(TJS_W("focus"), 0.5); scale = (REAL)info.getRealValue(TJS_W("scale"), 1.0);
+        }
+        // focus で scale に達する釣鐘。 両側をそれぞれ正規分布の累積で 0 → 1 に寄せる
+        const int N = 33;
+        for (int i = 0; i < N; i++) {
+            REAL t = (REAL)i / (N - 1);
+            double f;
+            if (t <= focus) { double u = focus > 0 ? t / focus : 1; f = 0.5 * (1 + erf((u - 0.5) * 2 * 1.5)); }
+            else            { double u = focus < 1 ? (1 - t) / (1 - focus) : 1; f = 0.5 * (1 + erf((u - 0.5) * 2 * 1.5)); }
+            r.push_back(makeStop(t, lerpARGB(c1, c2, (REAL)(f * scale))));
+        }
+    }
+    if (r.size() >= 2) stops = r;
+}
+
+// --------------------------------------------------------
 // アピアランス情報
 // --------------------------------------------------------
 
@@ -143,17 +296,36 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
         if (type == BrushTypeLinearGradient) {
             info.useLinearGradient = true;
 
+            // 始点・終点。 GDI+ と同じく point1/point2、無ければ rect + (angle | mode)
             tTJSVariant var;
             if (propInfo.checkVariant(TJS_W("point1"), var)) {
                 PointF p1 = getPoint(var);
                 info.gradX1 = p1.X;
                 info.gradY1 = p1.Y;
+                if (propInfo.checkVariant(TJS_W("point2"), var)) {
+                    PointF p2 = getPoint(var);
+                    info.gradX2 = p2.X;
+                    info.gradY2 = p2.Y;
+                }
+            } else if (propInfo.checkVariant(TJS_W("rect"), var)) {
+                RectF rect = getRect(var);
+                REAL angle = 0;
+                bool scalable = false;
+                if (propInfo.HasValue(TJS_W("angle"))) {
+                    angle    = (REAL)propInfo.getRealValue(TJS_W("angle"), 0);
+                    scalable = propInfo.getIntValue(TJS_W("isAngleScalable"), 0) != 0;
+                } else {
+                    switch (propInfo.getIntValue(TJS_W("mode"), LinearGradientModeHorizontal)) {
+                    case LinearGradientModeVertical:         angle =  90; break;
+                    case LinearGradientModeForwardDiagonal:  angle =  45; scalable = true; break;
+                    case LinearGradientModeBackwardDiagonal: angle = 135; scalable = true; break;
+                    default:                                 angle =   0; break;
+                    }
+                }
+                linearPointsFromRect(rect, angle, scalable, info.gradX1, info.gradY1, info.gradX2, info.gradY2);
             }
-            if (propInfo.checkVariant(TJS_W("point2"), var)) {
-                PointF p2 = getPoint(var);
-                info.gradX2 = p2.X;
-                info.gradY2 = p2.Y;
-            }
+            // 範囲外の扱い。 GDI+ の線形グラデーションの既定は Tile (繰り返し)
+            info.gradSpread = toSpread(propInfo.getIntValue(TJS_W("wrapMode"), WrapModeTile));
 
             ARGB color1 = (ARGB)propInfo.getIntValue(TJS_W("color1"), 0);
             ARGB color2 = (ARGB)propInfo.getIntValue(TJS_W("color2"), 0);
@@ -173,6 +345,7 @@ void Appearance::addBrush(tTJSVariant colorOrBrush, REAL ox, REAL oy)
 
             info.colorStops.push_back(stop1);
             info.colorStops.push_back(stop2);
+            applyBlendParams(propInfo, color1, color2, info.colorStops);
         } else if (type == BrushTypePathGradient) { // PathGradient (RadialGradient として近似)
             info.useRadialGradient = true;
 
@@ -344,7 +517,28 @@ void Appearance::addPen(tTJSVariant colorOrBrush, tTJSVariant widthOrOption, REA
         if (propInfo.checkVariant(TJS_W("dashStyle"), var)) {
             if (IsArray(var)) {
                 getReals(var, info.dashPattern);
+            } else if (var.Type() == tvtInteger) {
+                // GDI+ の DashStyle。 パターンはペン幅の倍数
+                static const REAL dash[]       = { 3, 1 };
+                static const REAL dot[]        = { 1, 1 };
+                static const REAL dashdot[]    = { 3, 1, 1, 1 };
+                static const REAL dashdotdot[] = { 3, 1, 1, 1, 1, 1 };
+                const REAL *pat = nullptr; int n = 0;
+                switch ((tjs_int)var) {
+                case DashStyleDash:       pat = dash;       n = 2; break;
+                case DashStyleDot:        pat = dot;        n = 2; break;
+                case DashStyleDashDot:    pat = dashdot;    n = 4; break;
+                case DashStyleDashDotDot: pat = dashdotdot; n = 6; break;
+                default: break; // Solid / Custom は実線
+                }
+                REAL w = info.strokeWidth > 0 ? info.strokeWidth : 1;
+                for (int i = 0; i < n; i++) info.dashPattern.push_back(pat[i] * w);
             }
+        }
+
+        // DashCap (破線の各区切りの端)
+        if (propInfo.checkVariant(TJS_W("dashCap"), var)) {
+            info.dashCap = (int)(tjs_int)var;
         }
 
         // DashOffset
@@ -1214,6 +1408,9 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
 
             if (!info.dashPattern.empty()) {
                 shape->strokeDash(info.dashPattern.data(), (uint32_t)info.dashPattern.size(), info.dashOffset);
+                // ThorVG は破線の区切りごとに線端を付ける。 GDI+ は区切りの端を DashCap
+                // (既定 Flat) で描くので合わせる (Square のままだと隙間が埋まる)
+                shape->strokeCap(info.dashCap == DashCapRound ? tvg::StrokeCap::Round : tvg::StrokeCap::Butt);
             }
 
             // フィル色を透明に
@@ -1268,11 +1465,13 @@ RectF LayerExDraw::drawShapeWithAppearance(const Appearance *app, tvg::Shape* ba
                 tvg::LinearGradient* grad = tvg::LinearGradient::gen();
                 grad->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
                 grad->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                grad->spread(info.gradSpread);
                 shape->fill(grad);
             } else if (info.useRadialGradient) {
                 tvg::RadialGradient* grad = tvg::RadialGradient::gen();
                 grad->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
                 grad->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                grad->spread(info.gradSpread);
                 shape->fill(grad);
             } else {
                 shape->fill(info.fillR, info.fillG, info.fillB, info.fillA);
@@ -1618,11 +1817,13 @@ RectF LayerExDraw::drawString(const FontInfo *font, const Appearance *app, REAL 
                     tvg::LinearGradient* lg = tvg::LinearGradient::gen();
                     lg->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
                     lg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    lg->spread(info.gradSpread);
                     grad = lg;
                 } else {
                     tvg::RadialGradient* rg = tvg::RadialGradient::gen();
                     rg->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
                     rg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    rg->spread(info.gradSpread);
                     grad = rg;
                 }
                 textObj->fill(grad);
@@ -1721,11 +1922,13 @@ RectF LayerExDraw::drawStringArea(const FontInfo *font, const Appearance *app, R
                     tvg::LinearGradient* lg = tvg::LinearGradient::gen();
                     lg->linear(info.gradX1, info.gradY1, info.gradX2, info.gradY2);
                     lg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    lg->spread(info.gradSpread);
                     grad = lg;
                 } else {
                     tvg::RadialGradient* rg = tvg::RadialGradient::gen();
                     rg->radial(info.gradCx, info.gradCy, info.gradR, info.gradCx, info.gradCy, 0);
                     rg->colorStops(info.colorStops.data(), (uint32_t)info.colorStops.size());
+                    rg->spread(info.gradSpread);
                     grad = rg;
                 }
                 textObj->fill(grad);

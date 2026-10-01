@@ -547,6 +547,59 @@ NCB_REGISTER_CLASS(GdiPlus)
 	ENUM(SmoothingModeHighQuality);
 	ENUM(SmoothingModeNone);
 	ENUM(SmoothingModeAntiAlias);
+	ENUM(SmoothingModeInvalid);
+
+	// 以下は layerExDraw (GDI+) 互換の定数 (無いと GdiPlus.X の参照で落ちる)
+	// WrapMode
+	ENUM(WrapModeTile);
+	ENUM(WrapModeTileFlipX);
+	ENUM(WrapModeTileFlipY);
+	ENUM(WrapModeTileFlipXY);
+	ENUM(WrapModeClamp);
+
+	// LinearGradientMode
+	ENUM(LinearGradientModeHorizontal);
+	ENUM(LinearGradientModeVertical);
+	ENUM(LinearGradientModeForwardDiagonal);
+	ENUM(LinearGradientModeBackwardDiagonal);
+
+	// DashStyle / DashCap
+	ENUM(DashStyleSolid);
+	ENUM(DashStyleDash);
+	ENUM(DashStyleDot);
+	ENUM(DashStyleDashDot);
+	ENUM(DashStyleDashDotDot);
+	ENUM(DashStyleCustom);
+	ENUM(DashCapFlat);
+	ENUM(DashCapRound);
+	ENUM(DashCapTriangle);
+
+	// LineCap の anchor 系 (受けるだけ)
+	ENUM(LineCapNoAnchor);
+	ENUM(LineCapSquareAnchor);
+	ENUM(LineCapRoundAnchor);
+	ENUM(LineCapDiamondAnchor);
+	ENUM(LineCapArrowAnchor);
+
+	// PenAlignment (受けるだけ)
+	ENUM(PenAlignmentCenter);
+	ENUM(PenAlignmentInset);
+
+	// FontStyle
+	ENUM(FontStyleRegular);
+	ENUM(FontStyleBold);
+	ENUM(FontStyleItalic);
+	ENUM(FontStyleBoldItalic);
+	ENUM(FontStyleUnderline);
+	ENUM(FontStyleStrikeout);
+
+	// TextRenderingHint (受けるだけ)
+	ENUM(TextRenderingHintSystemDefault);
+	ENUM(TextRenderingHintSingleBitPerPixelGridFit);
+	ENUM(TextRenderingHintSingleBitPerPixel);
+	ENUM(TextRenderingHintAntiAliasGridFit);
+	ENUM(TextRenderingHintAntiAlias);
+	ENUM(TextRenderingHintClearTypeGridFit);
 
 // classes
 	NCB_SUBCLASS_NAME(PointF);

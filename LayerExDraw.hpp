@@ -60,7 +60,82 @@ enum SmoothingMode {
     SmoothingModeHighSpeed   = 1,
     SmoothingModeHighQuality = 2,
     SmoothingModeNone        = 3,
-    SmoothingModeAntiAlias   = 4
+    SmoothingModeAntiAlias   = 4,
+    SmoothingModeInvalid     = -1
+};
+
+// 以下は layerExDraw (GDI+) との互換のための値。 GDI+ と同じ数値にしてある。
+//   ⚠ 定数が無いと GdiPlus.X の参照が「メンバが見つかりません」で落ちるので、
+//     再現していない機能の定数も登録する (どう扱うかは各定数のコメント)
+
+// グラデーションの範囲外の扱い。 ThorVG の FillSpread へ対応付ける
+//   Tile → Repeat / TileFlipX・Y・XY → Reflect (軸は区別しない) / Clamp → Pad
+enum WrapMode {
+    WrapModeTile        = 0,
+    WrapModeTileFlipX   = 1,
+    WrapModeTileFlipY   = 2,
+    WrapModeTileFlipXY  = 3,
+    WrapModeClamp       = 4
+};
+
+// 線形グラデーションの方向 (rect 指定時)
+enum LinearGradientMode {
+    LinearGradientModeHorizontal       = 0,
+    LinearGradientModeVertical         = 1,
+    LinearGradientModeForwardDiagonal  = 2,
+    LinearGradientModeBackwardDiagonal = 3
+};
+
+// 破線の型 (ペンの dashStyle に整数で渡す)。 パターンはペン幅の倍数 (GDI+ と同じ)
+enum DashStyle {
+    DashStyleSolid      = 0,
+    DashStyleDash       = 1,
+    DashStyleDot        = 2,
+    DashStyleDashDot    = 3,
+    DashStyleDashDotDot = 4,
+    DashStyleCustom     = 5
+};
+
+// 破線の端の形。 ThorVG に区別が無いので値は受けるだけ (端は startCap/endCap と同じ)
+enum DashCap {
+    DashCapFlat     = 0,
+    DashCapRound    = 2,
+    DashCapTriangle = 3
+};
+
+// 線端の矢印など (anchor)。 ThorVG に無いので受けるだけ (Flat 扱い)
+enum LineCapAnchor {
+    LineCapNoAnchor      = 0x10,
+    LineCapSquareAnchor  = 0x11,
+    LineCapRoundAnchor   = 0x12,
+    LineCapDiamondAnchor = 0x13,
+    LineCapArrowAnchor   = 0x14
+};
+
+// ペンの位置。 受けるだけ (常に Center)
+enum PenAlignment {
+    PenAlignmentCenter = 0,
+    PenAlignmentInset  = 1
+};
+
+// フォントの書体 (Font の第 3 引数)
+enum FontStyle {
+    FontStyleRegular    = 0,
+    FontStyleBold       = 1,
+    FontStyleItalic     = 2,
+    FontStyleBoldItalic = 3,
+    FontStyleUnderline  = 4,
+    FontStyleStrikeout  = 8
+};
+
+// 文字の描画品質。 受けるだけ
+enum TextRenderingHint {
+    TextRenderingHintSystemDefault            = 0,
+    TextRenderingHintSingleBitPerPixelGridFit = 1,
+    TextRenderingHintSingleBitPerPixel        = 2,
+    TextRenderingHintAntiAliasGridFit         = 3,
+    TextRenderingHintAntiAlias                = 4,
+    TextRenderingHintClearTypeGridFit         = 5
 };
 
 // --------------------------------------------------------
@@ -399,6 +474,7 @@ public:
         REAL miterLimit;
         vector<REAL> dashPattern;
         REAL dashOffset;
+        int dashCap; // 破線の各区切りの端 (DashCap。既定は GDI+ と同じ Flat)
         
         // フィル情報
         uint8_t fillR, fillG, fillB, fillA;
@@ -409,6 +485,7 @@ public:
         REAL gradX1, gradY1, gradX2, gradY2;
         REAL gradCx, gradCy, gradR;
         vector<tvg::Fill::ColorStop> colorStops;
+        tvg::FillSpread gradSpread; // 範囲外の扱い (wrapMode)
 
         // テクスチャ(タイル)フィル情報 (GDI+ TextureBrush 相当)
         bool useTextureFill;
@@ -418,11 +495,11 @@ public:
         DrawInfo() : type(0), ox(0), oy(0), strokeWidth(1),
             strokeR(0), strokeG(0), strokeB(0), strokeA(255),
             strokeCap(tvg::StrokeCap::Square), strokeJoin(tvg::StrokeJoin::Bevel),
-            miterLimit(4), dashOffset(0),
+            miterLimit(4), dashOffset(0), dashCap(DashCapFlat),
             fillR(0), fillG(0), fillB(0), fillA(255),
             useLinearGradient(false), useRadialGradient(false),
             gradX1(0), gradY1(0), gradX2(0), gradY2(0),
-            gradCx(0), gradCy(0), gradR(0),
+            gradCx(0), gradCy(0), gradR(0), gradSpread(tvg::FillSpread::Pad),
             useTextureFill(false), texW(0), texH(0) {}
     };
     vector<DrawInfo> drawInfos;

@@ -114,13 +114,17 @@ static const unsigned char lic_02[] = {
 
 void RegisterLayerExVectorLicenses()
 {
-	TVPRegisterLicense(TJS_W("ThorVG"), TJS_W("plugin:layerExVector"), lic_00, 640, 1077);
+	try {
+		TVPRegisterLicense(TJS_W("ThorVG"), TJS_W("plugin:layerExVector"), lic_00, 640, 1077);
 #if defined(TVP_LICENSE_WITH_LOTTIE)
-	TVPRegisterLicense(TJS_W("JerryScript"), TJS_W("plugin:layerExVector"), lic_01, 727, 1283);
+		TVPRegisterLicense(TJS_W("JerryScript"), TJS_W("plugin:layerExVector"), lic_01, 727, 1283);
 #endif
 #if defined(TVP_LICENSE_WITH_LOTTIE)
-	TVPRegisterLicense(TJS_W("RapidJSON"), TJS_W("plugin:layerExVector"), lic_02, 771, 1273);
+		TVPRegisterLicense(TJS_W("RapidJSON"), TJS_W("plugin:layerExVector"), lic_02, 771, 1273);
 #endif
+	} catch (...) {
+		/* 本体が License API を持たない (古い本体) ときは登録しない */
+	}
 }
 
 #else /* !TVP_HAS_LICENSE_API */

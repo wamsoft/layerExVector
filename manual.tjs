@@ -276,7 +276,7 @@ class GdiPlus {
 		function drawArc(x, y, width, height, startAngle, sweepAngle);
 
 		/**
-		 * 円錐の描画
+		 * 扇形 (パイ) の描画
 		 * @param x 左上座標
 		 * @param y 左上座標
 		 * @param width 横幅
@@ -447,7 +447,7 @@ class Layer {
 	function drawArc(app, x, y, width, height, startAngle, sweepAngle);
 
 	/**
-	 * 円錐の描画
+	 * 扇形 (パイ) の描画
 	 * @param app アピアランス GdiPlus.Appearance で描画スタイルを指定します
 	 * @param x 左上座標
 	 * @param y 左上座標
